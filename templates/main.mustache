@@ -1,0 +1,767 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template block_enhanced_course_overview/main
+
+    This template renders the main content area for the enhanced course overview block.
+}}
+
+<div id="block-enhanced-course-overview-{{uniqid}}" class="block-enhanced-course-overview">
+    <div class="filter-container mb-3">
+        <!-- Academic Year & Terms -->
+        <div class="filter-group">
+            <div class="filter-type-header">Academic Year &amp; Terms</div>
+            <div class="filter-buttons year-term-groups">
+                {{#years}}
+                <div class="year-term-group">
+                    <div class="year-btn {{#active}}active{{/active}}">{{name}}</div>
+                    <div class="term-buttons">
+                        {{#terms}}
+                        <button class="filter-btn term-btn {{#active}}active{{/active}}" 
+                                type="button"
+                                data-type="timeframe" 
+                                data-value="{{id}}">{{name}}</button>
+                        {{/terms}}
+                    </div>
+                </div>
+                {{/years}}
+            </div>
+        </div>
+        
+        <!-- Role Filter Group -->
+        <div class="filter-group">
+            <div class="filter-type-header">Role</div>
+            <div class="filter-buttons role-buttons">
+                {{#roles}}
+                <button class="filter-btn role-btn {{#active}}active{{/active}}" 
+                        type="button"
+                        data-type="role" 
+                        data-value="{{id}}">{{name}}</button>
+                {{/roles}}
+            </div>
+        </div>
+        
+        <!-- Active Filters Display -->
+        <div class="active-filters" {{^activefilters}}style="display: none;"{{/activefilters}}>
+            <span>Active filters:</span>
+            {{#activefilters}}
+            <div class="filter-tag">
+                <span>{{name}}</span>
+                <button class="remove-filter" data-type="{{type}}" data-value="{{id}}">×</button>
+            </div>
+            {{/activefilters}}
+            
+            <div class="logic-indicator">
+                Showing courses matching ANY selected term AND ANY selected role
+            </div>
+        </div>
+    </div>
+    
+    <!-- Course Cards -->
+    <div class="card-deck dashboard-card-deck" role="list">
+        {{#courses}}
+        <div class="card dashboard-card course-listitem"
+            data-terms="{{#terms}}{{.}} {{/terms}}"
+            data-role="{{user_role}}"
+            data-region="course-content"
+            data-course-id="{{id}}"
+            role="listitem">
+            
+            <a href="{{viewurl}}" tabindex="-1">
+                <div class="card-img dashboard-card-img" style="background-image: url('{{courseimage}}');">
+                    <span class="sr-only">{{fullname}}</span>
+                </div>
+            </a>
+            
+            <div class="card-body pr-1 course-info-container">
+                <div class="d-flex align-items-start">
+                    <div class="w-100 text-truncate">
+                        <div class="d-flex mb-1">
+                            <div class="d-flex mb-1 flex-wrap">
+                                <h4 class="h5 mb-0 text-truncate">
+                                    <a href="{{viewurl}}" class="aalink coursename mr-2">
+                                        {{{fullname}}}
+                                    </a>
+                                </h4>
+                            </div>
+                        </div>
+                        <div class="text-muted muted d-flex mb-1 flex-wrap">
+                            <span class="sr-only">Course</span>
+                            <span class="pl-1">{{shortname}}</span>
+                        </div>
+                        
+                        <!-- Term and Role Badges -->
+                        <div class="d-flex flex-wrap mt-2">
+                            {{#displaytermbadges}}
+                                {{#term_badges}}
+                                    <span class="badge badge-info m-1">{{name}}</span>
+                                {{/term_badges}}
+                            {{/displaytermbadges}}
+                            
+                            {{#displayrolebadges}}
+                                <span class="badge badge-secondary m-1 role-badge-{{role_badge.role}}">{{role_badge.name}}</span>
+                            {{/displayrolebadges}}
+                        </div>
+                    </div>
+                    
+                    <div class="ml-auto dropdown">
+                        <button class="btn btn-link btn-icon icon-size-3" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            <i class="icon fa fa-ellipsis-v fa-fw" aria-hidden="true"></i>
+                            <span class="sr-only">Actions</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            <a class="dropdown-item" href="{{viewurl}}">View course</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {{/courses}}
+    </div>
+</div>
+
+{{#js}}
+// Direct inline JavaScript for filters with debug logging
+(function() {
+    console.log('Enhanced Course Overview filter script loading...');
+    
+    // Make sure DOM is fully loaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initFilters);
+    } else {
+        initFilters();
+    }
+    
+    function initFilters() {
+        // Give the DOM a moment to fully render
+        setTimeout(function() {
+            var root = document.getElementById('block-enhanced-course-overview-{{uniqid}}');
+            if (!root) {
+                console.error('Enhanced Course Overview block not found with ID: block-enhanced-course-overview-{{uniqid}}');
+                // Try a fallback method to find the block
+                var blocks = document.querySelectorAll('.block-enhanced-course-overview');
+                if (blocks.length > 0) {
+                    root = blocks[0];
+                    console.log('Found block via fallback method');
+                } else {
+                    console.error('Could not find any Enhanced Course Overview blocks');
+                    return;
+                }
+            }
+            
+            console.log('Enhanced Course Overview block found:', root);
+            
+            // Find all filter buttons
+            var termButtons = root.querySelectorAll('.term-btn');
+            var roleButtons = root.querySelectorAll('.role-btn');
+            
+            console.log('Term buttons found:', termButtons.length);
+            console.log('Role buttons found:', roleButtons.length);
+            
+            // Track active filters - Initialize from already active buttons
+            var activeTerms = [];
+            var activeRoles = [];
+            
+            // Initialize from already active buttons
+            root.querySelectorAll('.term-btn.active').forEach(function(btn) {
+                activeTerms.push(btn.getAttribute('data-value'));
+            });
+            
+            root.querySelectorAll('.role-btn.active').forEach(function(btn) {
+                activeRoles.push(btn.getAttribute('data-value'));
+            });
+            
+            // Add direct click events to each button
+            for (var i = 0; i < termButtons.length; i++) {
+                termButtons[i].onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation(); // Prevent event bubbling
+                    console.log('Term button clicked:', this.getAttribute('data-value'));
+                    this.classList.toggle('active');
+                    
+                    // Force CSS update
+                    if (this.classList.contains('active')) {
+                        this.style.backgroundColor = '#007bff';
+                        this.style.color = 'white';
+                    } else {
+                        this.style.backgroundColor = 'white';
+                        this.style.color = '#007bff';
+                    }
+                    
+                    applyFilters();
+                };
+            }
+            
+            for (var j = 0; j < roleButtons.length; j++) {
+                roleButtons[j].onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation(); // Prevent event bubbling
+                    console.log('Role button clicked:', this.getAttribute('data-value'));
+                    this.classList.toggle('active');
+                    
+                    // Force CSS update
+                    if (this.classList.contains('active')) {
+                        this.style.backgroundColor = '#007bff';
+                        this.style.color = 'white';
+                    } else {
+                        this.style.backgroundColor = 'white';
+                        this.style.color = '#007bff';
+                    }
+                    
+                    applyFilters();
+                };
+            }
+            
+            // Filter courses based on active filters
+            function applyFilters() {
+                console.log('Applying filters...');
+                
+                // Update active filters
+                activeTerms = [];
+                var activeTermButtons = root.querySelectorAll('.term-btn.active');
+                for (var i = 0; i < activeTermButtons.length; i++) {
+                    activeTerms.push(activeTermButtons[i].getAttribute('data-value'));
+                }
+                
+                activeRoles = [];
+                var activeRoleButtons = root.querySelectorAll('.role-btn.active');
+                for (var j = 0; j < activeRoleButtons.length; j++) {
+                    activeRoles.push(activeRoleButtons[j].getAttribute('data-value'));
+                }
+                
+                console.log('Active terms:', activeTerms);
+                console.log('Active roles:', activeRoles);
+                
+                // Show all courses if no filters are active
+                var courses = document.querySelectorAll('.course-listitem');
+                console.log('Total courses:', courses.length);
+                
+                if (activeTerms.length === 0 && activeRoles.length === 0) {
+                    for (var k = 0; k < courses.length; k++) {
+                        courses[k].style.display = '';
+                    }
+                    console.log('No filters active, showing all courses');
+                } else {
+                    // Filter courses
+                    var shownCount = 0;
+                    var hiddenCount = 0;
+                    
+                    for (var l = 0; l < courses.length; l++) {
+                        var course = courses[l];
+                        var showCourse = true;
+                        
+                        // Debug course data
+                        console.log('Course:', course.querySelector('.coursename').textContent.trim());
+                        console.log('  Terms:', course.getAttribute('data-terms'));
+                        console.log('  Role:', course.getAttribute('data-role'));
+                        
+                        // Apply term filters
+                        if (activeTerms.length > 0) {
+                            var courseTermsStr = course.getAttribute('data-terms') || '';
+                            var courseTerms = courseTermsStr.trim().split(' ');
+                            var termMatch = false;
+                            
+                            for (var m = 0; m < activeTerms.length; m++) {
+                                if (courseTerms.indexOf(activeTerms[m]) !== -1) {
+                                    termMatch = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!termMatch) {
+                                showCourse = false;
+                                console.log('  Term filter mismatch');
+                            }
+                        }
+                        
+                        // Apply role filters
+                        if (activeRoles.length > 0 && showCourse && activeRoles.indexOf('all') === -1) {
+                            var courseRole = course.getAttribute('data-role');
+                            var roleMatch = false;
+                            
+                            for (var n = 0; n < activeRoles.length; n++) {
+                                if (courseRole === activeRoles[n]) {
+                                    roleMatch = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!roleMatch) {
+                                showCourse = false;
+                                console.log('  Role filter mismatch');
+                            }
+                        }
+                        
+                        // Show or hide the course
+                        course.style.display = showCourse ? '' : 'none';
+                        if (showCourse) {
+                            shownCount++;
+                        } else {
+                            hiddenCount++;
+                        }
+                    }
+                    
+                    console.log('Filter results - Shown:', shownCount, 'Hidden:', hiddenCount);
+                }
+                
+                // Update active filters display
+                updateActiveFiltersDisplay();
+            }
+            
+            // Update active filters display
+            function updateActiveFiltersDisplay() {
+                console.log('Updating active filters display');
+                
+                // Find active filters container
+                var activeFiltersContainer = root.querySelector('.active-filters');
+                if (!activeFiltersContainer) {
+                    console.error('Active filters container not found');
+                    return;
+                }
+                
+                // Clear current filter tags
+                var existingTags = activeFiltersContainer.querySelectorAll('.filter-tag');
+                for (var i = 0; i < existingTags.length; i++) {
+                    existingTags[i].parentNode.removeChild(existingTags[i]);
+                }
+                
+                // Add filter tags for terms
+                for (var j = 0; j < activeTerms.length; j++) {
+                    var termId = activeTerms[j];
+                    var termButton = root.querySelector('.term-btn[data-value="' + termId + '"]');
+                    if (!termButton) continue;
+                    
+                    var termName = termButton.textContent.trim();
+                    var yearGroup = termButton.closest('.year-term-group');
+                    if (!yearGroup) continue;
+                    
+                    var yearBtn = yearGroup.querySelector('.year-btn');
+                    if (!yearBtn) continue;
+                    
+                    var yearName = yearBtn.textContent.trim();
+                    
+                    var filterTag = document.createElement('div');
+                    filterTag.className = 'filter-tag';
+                    filterTag.innerHTML = '<span>' + yearName + ' ' + termName + '</span>' +
+                                        '<button class="remove-filter" data-type="timeframe" data-value="' + termId + '">×</button>';
+                    
+                    // Insert into the container
+                    var spanElement = activeFiltersContainer.querySelector('span');
+                    if (spanElement) {
+                        activeFiltersContainer.insertBefore(filterTag, spanElement.nextSibling);
+                    } else {
+                        activeFiltersContainer.appendChild(filterTag);
+                    }
+                    
+                    // Add event listener to the remove button
+                    var removeButton = filterTag.querySelector('.remove-filter');
+                    if (removeButton) {
+                        removeButton.onclick = function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            var value = this.getAttribute('data-value');
+                            var button = root.querySelector('.term-btn[data-value="' + value + '"]');
+                            if (button) {
+                                button.classList.remove('active');
+                                // Force CSS update
+                                button.style.backgroundColor = 'white';
+                                button.style.color = '#007bff';
+                            }
+                            applyFilters();
+                        };
+                    }
+                }
+                
+                // Show/hide the active filters section based on whether there are any filters
+                activeFiltersContainer.style.display = (activeTerms.length > 0 || activeRoles.length > 0) ? '' : 'none';
+            }
+            
+            // Initial filtering if there are active filters
+            if (activeTerms.length > 0 || activeRoles.length > 0) {
+                applyFilters();
+            }
+            
+            console.log('Enhanced Course Overview filters initialized');
+        }, 500); // Small delay to ensure everything has rendered
+    }
+})();
+{{/js}}{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template block_enhanced_course_overview/main
+
+    This template renders the main content area for the enhanced course overview block.
+}}
+
+<div id="block-enhanced-course-overview-{{uniqid}}" class="block-enhanced-course-overview">
+    <div class="filter-container mb-3">
+        <!-- Academic Year & Terms -->
+        <div class="filter-group">
+            <div class="filter-type-header">Academic Year &amp; Terms</div>
+            <div class="filter-buttons year-term-groups">
+                {{#years}}
+                <div class="year-term-group">
+                    <div class="year-btn {{#active}}active{{/active}}">{{name}}</div>
+                    <div class="term-buttons">
+                        {{#terms}}
+                        <button class="filter-btn term-btn {{#active}}active{{/active}}" 
+                                data-type="timeframe" 
+                                data-value="{{id}}">{{name}}</button>
+                        {{/terms}}
+                    </div>
+                </div>
+                {{/years}}
+            </div>
+        </div>
+        
+        <!-- Role Filter Group -->
+        <div class="filter-group">
+            <div class="filter-type-header">Role</div>
+            <div class="filter-buttons role-buttons">
+                {{#roles}}
+                <button class="filter-btn role-btn {{#active}}active{{/active}}" 
+                        data-type="role" 
+                        data-value="{{id}}">{{name}}</button>
+                {{/roles}}
+            </div>
+        </div>
+        
+        <!-- Active Filters Display -->
+        <div class="active-filters">
+            <span>Active filters:</span>
+            {{#activefilters}}
+            <div class="filter-tag">
+                <span>{{name}}</span>
+                <button class="remove-filter" data-type="{{type}}" data-value="{{id}}">×</button>
+            </div>
+            {{/activefilters}}
+            
+            <div class="logic-indicator">
+                Showing courses matching ANY selected term AND ANY selected role
+            </div>
+        </div>
+    </div>
+    
+    <!-- Course Cards -->
+    <div class="card-deck dashboard-card-deck" role="list">
+        {{#courses}}
+        <div class="card dashboard-card course-listitem"
+            data-terms="{{#terms}}{{.}} {{/terms}}"
+            data-role="{{user_role}}"
+            data-region="course-content"
+            data-course-id="{{id}}"
+            role="listitem">
+            
+            <a href="{{viewurl}}" tabindex="-1">
+                <div class="card-img dashboard-card-img" style="background-image: url('{{courseimage}}');">
+                    <span class="sr-only">{{fullname}}</span>
+                </div>
+            </a>
+            
+            <div class="card-body pr-1 course-info-container">
+                <div class="d-flex align-items-start">
+                    <div class="w-100 text-truncate">
+                        <div class="d-flex mb-1">
+                            <div class="d-flex mb-1 flex-wrap">
+                                <h4 class="h5 mb-0 text-truncate">
+                                    <a href="{{viewurl}}" class="aalink coursename mr-2">
+                                        {{{fullname}}}
+                                    </a>
+                                </h4>
+                            </div>
+                        </div>
+                        <div class="text-muted muted d-flex mb-1 flex-wrap">
+                            <span class="sr-only">Course</span>
+                            <span class="pl-1">{{shortname}}</span>
+                        </div>
+                        
+                        <!-- Term and Role Badges -->
+                        <div class="d-flex flex-wrap mt-2">
+                            {{#displaytermbadges}}
+                                {{#term_badges}}
+                                    <span class="badge badge-info m-1">{{name}}</span>
+                                {{/term_badges}}
+                            {{/displaytermbadges}}
+                            
+                            {{#displayrolebadges}}
+                                <span class="badge badge-secondary m-1 role-badge-{{role_badge.role}}">{{role_badge.name}}</span>
+                            {{/displayrolebadges}}
+                        </div>
+                    </div>
+                    
+                    <div class="ml-auto dropdown">
+                        <button class="btn btn-link btn-icon icon-size-3" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            <i class="icon fa fa-ellipsis-v fa-fw" aria-hidden="true"></i>
+                            <span class="sr-only">Actions</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            <a class="dropdown-item" href="{{viewurl}}">View course</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {{/courses}}
+    </div>
+</div>
+
+{{#js}}
+// Direct inline JavaScript for filters with debug logging
+(function() {
+    console.log('Enhanced Course Overview filter script loading...');
+    
+    // Make sure DOM is fully loaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initFilters);
+    } else {
+        initFilters();
+    }
+    
+    function initFilters() {
+        // Give the DOM a moment to fully render
+        setTimeout(function() {
+            var root = document.getElementById('block-enhanced-course-overview-{{uniqid}}');
+            if (!root) {
+                console.error('Enhanced Course Overview block not found with ID: block-enhanced-course-overview-{{uniqid}}');
+                // Try a fallback method to find the block
+                var blocks = document.querySelectorAll('.block-enhanced-course-overview');
+                if (blocks.length > 0) {
+                    root = blocks[0];
+                    console.log('Found block via fallback method');
+                } else {
+                    console.error('Could not find any Enhanced Course Overview blocks');
+                    return;
+                }
+            }
+            
+            console.log('Enhanced Course Overview block found:', root);
+            
+            // Find all filter buttons
+            var termButtons = root.querySelectorAll('.term-btn');
+            var roleButtons = root.querySelectorAll('.role-btn');
+            
+            console.log('Term buttons found:', termButtons.length);
+            console.log('Role buttons found:', roleButtons.length);
+            
+            // Track active filters
+            var activeTerms = [];
+            var activeRoles = [];
+            
+            // Add direct click events to each button
+            for (var i = 0; i < termButtons.length; i++) {
+                termButtons[i].onclick = function(e) {
+                    e.preventDefault();
+                    console.log('Term button clicked:', this.getAttribute('data-value'));
+                    this.classList.toggle('active');
+                    applyFilters();
+                };
+            }
+            
+            for (var j = 0; j < roleButtons.length; j++) {
+                roleButtons[j].onclick = function(e) {
+                    e.preventDefault();
+                    console.log('Role button clicked:', this.getAttribute('data-value'));
+                    this.classList.toggle('active');
+                    applyFilters();
+                };
+            }
+            
+            // Also set up delegate event on the container for future buttons
+            root.addEventListener('click', function(e) {
+                var target = e.target;
+                
+                // Check if the clicked element is a filter button
+                if (target.classList.contains('term-btn') || target.classList.contains('role-btn')) {
+                    e.preventDefault();
+                    console.log('Filter button clicked via delegation:', target.getAttribute('data-value'));
+                    target.classList.toggle('active');
+                    applyFilters();
+                }
+                
+                // Check if the clicked element is a remove button
+                if (target.classList.contains('remove-filter')) {
+                    e.preventDefault();
+                    console.log('Remove filter clicked:', target.getAttribute('data-value'));
+                    var filterValue = target.getAttribute('data-value');
+                    var filterType = target.getAttribute('data-type');
+                    var filterButton = root.querySelector('.filter-btn[data-type="' + filterType + '"][data-value="' + filterValue + '"]');
+                    if (filterButton) {
+                        filterButton.classList.remove('active');
+                    }
+                    applyFilters();
+                }
+            });
+            
+            // Filter courses based on active filters
+            function applyFilters() {
+                console.log('Applying filters...');
+                
+                // Update active filters
+                activeTerms = [];
+                var activeTermButtons = root.querySelectorAll('.term-btn.active');
+                for (var i = 0; i < activeTermButtons.length; i++) {
+                    activeTerms.push(activeTermButtons[i].getAttribute('data-value'));
+                }
+                
+                activeRoles = [];
+                var activeRoleButtons = root.querySelectorAll('.role-btn.active');
+                for (var j = 0; j < activeRoleButtons.length; j++) {
+                    activeRoles.push(activeRoleButtons[j].getAttribute('data-value'));
+                }
+                
+                console.log('Active terms:', activeTerms);
+                console.log('Active roles:', activeRoles);
+                
+                // Show all courses if no filters are active
+                var courses = document.querySelectorAll('.course-listitem');
+                console.log('Total courses:', courses.length);
+                
+                if (activeTerms.length === 0 && activeRoles.length === 0) {
+                    for (var k = 0; k < courses.length; k++) {
+                        courses[k].style.display = '';
+                    }
+                    console.log('No filters active, showing all courses');
+                    return;
+                }
+                
+                // Filter courses
+                var shownCount = 0;
+                var hiddenCount = 0;
+                
+                for (var l = 0; l < courses.length; l++) {
+                    var course = courses[l];
+                    var showCourse = true;
+                    
+                    // Apply term filters
+                    if (activeTerms.length > 0) {
+                        var courseTermsStr = course.getAttribute('data-terms') || '';
+                        var courseTerms = courseTermsStr.trim().split(' ');
+                        var termMatch = false;
+                        
+                        for (var m = 0; m < activeTerms.length; m++) {
+                            if (courseTerms.indexOf(activeTerms[m]) !== -1) {
+                                termMatch = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!termMatch) {
+                            showCourse = false;
+                        }
+                    }
+                    
+                    // Apply role filters
+                    if (activeRoles.length > 0 && showCourse) {
+                        var courseRole = course.getAttribute('data-role');
+                        var roleMatch = false;
+                        
+                        for (var n = 0; n < activeRoles.length; n++) {
+                            if (courseRole === activeRoles[n]) {
+                                roleMatch = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!roleMatch) {
+                            showCourse = false;
+                        }
+                    }
+                    
+                    // Show or hide the course
+                    course.style.display = showCourse ? '' : 'none';
+                    if (showCourse) {
+                        shownCount++;
+                    } else {
+                        hiddenCount++;
+                    }
+                }
+                
+                console.log('Filter results - Shown:', shownCount, 'Hidden:', hiddenCount);
+                
+                // Update active filters display
+                updateActiveFiltersDisplay();
+            }
+            
+            // Update active filters display
+            function updateActiveFiltersDisplay() {
+                console.log('Updating active filters display');
+                
+                // Find active filters container
+                var activeFiltersContainer = root.querySelector('.active-filters');
+                if (!activeFiltersContainer) {
+                    console.error('Active filters container not found');
+                    return;
+                }
+                
+                // Clear current filter tags
+                var existingTags = activeFiltersContainer.querySelectorAll('.filter-tag');
+                for (var i = 0; i < existingTags.length; i++) {
+                    existingTags[i].parentNode.removeChild(existingTags[i]);
+                }
+                
+                // Add filter tags for terms
+                for (var j = 0; j < activeTerms.length; j++) {
+                    var termId = activeTerms[j];
+                    var termButton = root.querySelector('.term-btn[data-value="' + termId + '"]');
+                    if (!termButton) continue;
+                    
+                    var termName = termButton.textContent.trim();
+                    var yearGroup = termButton.closest('.year-term-group');
+                    if (!yearGroup) continue;
+                    
+                    var yearBtn = yearGroup.querySelector('.year-btn');
+                    if (!yearBtn) continue;
+                    
+                    var yearName = yearBtn.textContent.trim();
+                    
+                    var filterTag = document.createElement('div');
+                    filterTag.className = 'filter-tag';
+                    filterTag.innerHTML = '<span>' + yearName + ' ' + termName + '</span>' +
+                                        '<button class="remove-filter" data-type="timeframe" data-value="' + termId + '">×</button>';
+                    
+                    // Insert into the container
+                    var spanElement = activeFiltersContainer.querySelector('span');
+                    if (spanElement) {
+                        activeFiltersContainer.insertBefore(filterTag, spanElement.nextSibling);
+                    } else {
+                        activeFiltersContainer.appendChild(filterTag);
+                    }
+                }
+                
+                // Show/hide the active filters section based on whether there are any filters
+                activeFiltersContainer.style.display = (activeTerms.length > 0 || activeRoles.length > 0) ? '' : 'none';
+            }
+            
+            console.log('Enhanced Course Overview filters initialized');
+        }, 500); // Small delay to ensure everything has rendered
+    }
+})();
+{{/js}}

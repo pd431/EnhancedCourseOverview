@@ -1,0 +1,339 @@
+/* Styles for enhanced course overview block */
+
+/* Filter button container */
+.block-enhanced-course-overview .filter-container {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+}
+
+/* Filter type headers */
+.block-enhanced-course-overview .filter-type-header {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: #495057;
+}
+
+/* Year/Term groups */
+.block-enhanced-course-overview .year-term-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.block-enhanced-course-overview .year-term-group {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    overflow: hidden;
+}
+
+/* Year button */
+.block-enhanced-course-overview .year-btn {
+    background-color: #e9ecef;
+    padding: 0.5rem 1rem;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.block-enhanced-course-overview .year-btn.active {
+    background-color: #007bff !important;
+    color: white !important;
+}
+
+/* Term buttons container */
+.block-enhanced-course-overview .term-buttons {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+/* Filter buttons */
+.block-enhanced-course-overview .filter-btn {
+    background-color: white;
+    border: none;
+    padding: 0.5rem;
+    min-width: 3rem;
+    cursor: pointer;
+    color: #007bff;
+}
+
+.block-enhanced-course-overview .term-btn {
+    border-right: 1px solid #dee2e6;
+}
+
+.block-enhanced-course-overview .term-btn:last-child {
+    border-right: none;
+}
+
+.block-enhanced-course-overview .filter-btn:hover {
+    background-color: #e9ecef;
+}
+
+.block-enhanced-course-overview .filter-btn.active {
+    background-color: #007bff !important;
+    color: white !important;
+}
+
+/* Role buttons */
+.block-enhanced-course-overview .role-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.block-enhanced-course-overview .role-btn {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 0.5rem 1rem;
+}
+
+/* Active filters */
+.block-enhanced-course-overview .active-filters {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background-color: #e9ecef;
+    border-radius: 0.25rem;
+}
+
+.block-enhanced-course-overview .active-filters > span {
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+/* Filter tags */
+.block-enhanced-course-overview .filter-tag {
+    display: inline-flex;
+    align-items: center;
+    background-color: #007bff;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    margin: 0.25rem;
+}
+
+.block-enhanced-course-overview .remove-filter {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    line-height: 1;
+    margin-left: 0.25rem;
+    padding: 0;
+    cursor: pointer;
+}
+
+/* Logic indicator */
+.block-enhanced-course-overview .logic-indicator {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Term badges */
+.block-enhanced-course-overview .badge-info {
+    background-color: #17a2b8;
+}
+
+/* Role badges */
+.block-enhanced-course-overview .badge-secondary {
+    background-color: #6c757d;
+}
+
+/* Student role badge */
+.block-enhanced-course-overview .role-badge-student {
+    background-color: #28a745;
+}
+
+/* Teacher role badge */
+.block-enhanced-course-overview .role-badge-teacher {
+    background-color: #007bff;
+}
+
+/* Admin role badge */
+.block-enhanced-course-overview .role-badge-admin {
+    background-color: #dc3545;
+}/* Styles for enhanced course overview block */
+
+/* Filter container */
+.block-enhanced-course-overview .filter-container {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+}
+
+/* Filter groups */
+.block-enhanced-course-overview .filter-group {
+    margin-bottom: 1rem;
+}
+
+/* Filter type headers */
+.block-enhanced-course-overview .filter-type-header {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: #495057;
+}
+
+/* Year/Term groups */
+.block-enhanced-course-overview .year-term-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.block-enhanced-course-overview .year-term-group {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    overflow: hidden;
+}
+
+/* Year button */
+.block-enhanced-course-overview .year-btn {
+    background-color: #e9ecef;
+    padding: 0.5rem 1rem;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.block-enhanced-course-overview .year-btn.active {
+    background-color: #007bff;
+    color: white;
+}
+
+/* Term buttons container */
+.block-enhanced-course-overview .term-buttons {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+/* Filter buttons */
+.block-enhanced-course-overview .filter-btn {
+    background-color: white;
+    border: none;
+    padding: 0.5rem;
+    min-width: 3rem;
+    cursor: pointer;
+}
+
+.block-enhanced-course-overview .term-btn {
+    border-right: 1px solid #dee2e6;
+}
+
+.block-enhanced-course-overview .term-btn:last-child {
+    border-right: none;
+}
+
+.block-enhanced-course-overview .filter-btn:hover {
+    background-color: #e9ecef;
+}
+
+.block-enhanced-course-overview .filter-btn.active {
+    background-color: #007bff;
+    color: white;
+}
+
+/* Role buttons */
+.block-enhanced-course-overview .role-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.block-enhanced-course-overview .role-btn {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 0.5rem 1rem;
+}
+
+/* Active filters */
+.block-enhanced-course-overview .active-filters {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background-color: #e9ecef;
+    border-radius: 0.25rem;
+}
+
+.block-enhanced-course-overview .active-filters > span {
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+/* Filter tags */
+.block-enhanced-course-overview .filter-tag {
+    display: inline-flex;
+    align-items: center;
+    background-color: #007bff;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    margin: 0.25rem;
+}
+
+.block-enhanced-course-overview .remove-filter {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    line-height: 1;
+    margin-left: 0.25rem;
+    cursor: pointer;
+}
+
+/* Logic indicator */
+.block-enhanced-course-overview .logic-indicator {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Term badges */
+.block-enhanced-course-overview .badge-info {
+    background-color: #17a2b8;
+}
+
+/* Role badges */
+.block-enhanced-course-overview .badge-secondary,
+.role-badge-all {
+    background-color: #6c757d;
+}
+
+/* Student role badge */
+.block-enhanced-course-overview .course-listitem[data-role="student"] .badge-secondary,
+.role-badge-student {
+    background-color: #28a745;
+}
+
+/* Teacher role badge */
+.block-enhanced-course-overview .course-listitem[data-role="teacher"] .badge-secondary,
+.role-badge-teacher {
+    background-color: #007bff;
+}
+
+/* Admin role badge */
+.block-enhanced-course-overview .course-listitem[data-role="admin"] .badge-secondary,
+.role-badge-admin {
+    background-color: #dc3545;
+}
+
+/* Empty state message */
+.block-enhanced-course-overview .enhanced-overview-empty-message {
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: 0.25rem;
+}
+
+/* Hide the standard My Overview filter controls since we replace them */
+.block-enhanced-course-overview .dropdown-menu.show {
+    display: none;
+}
+
+/* When editing is disabled on Dashboard, hide block controls */
+.page-mycourses .block-enhanced-course-overview .block-controls {
+    display: none;
+}
