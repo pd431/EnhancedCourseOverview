@@ -1,0 +1,92 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template block_enhancedcourseoverview/filter_buttons
+
+    This template renders the filter buttons for the Enhanced Course Overview block.
+
+    Example context (json):
+    {
+        "groups": [
+            {
+                "name": "2023-24",
+                "filters": [
+                    {
+                        "title": "Term 1",
+                        "match": "_A1_202324",
+                        "id": "filter-a1b2c3d4"
+                    },
+                    {
+                        "title": "Term 2",
+                        "match": "_A2_202324",
+                        "id": "filter-e5f6g7h8"
+                    }
+                ]
+            },
+            {
+                "name": "2024-25",
+                "filters": [
+                    {
+                        "title": "Term 1",
+                        "match": "_A1_202425",
+                        "id": "filter-i9j0k1l2"
+                    },
+                    {
+                        "title": "Term 2",
+                        "match": "_A2_202425",
+                        "id": "filter-m3n4o5p6"
+                    }
+                ]
+            }
+        ],
+        "hasgroups": true,
+        "uniqid": "12345678"
+    }
+}}
+
+{{#hasgroups}}
+<div class="enhancedcourseoverview-filters mb-3" data-region="course-filters-{{uniqid}}">
+    <div class="d-flex flex-wrap align-items-center">
+        <div class="mb-1 mr-2">
+            <button type="button" class="btn btn-outline-secondary enhancedcourseoverview-filter active" 
+                    data-action="filter-courses" data-filter-value="" 
+                    aria-label="{{#str}}allcourses, block_enhancedcourseoverview{{/str}}"
+                    aria-pressed="true">
+                {{#str}}allcourses, block_enhancedcourseoverview{{/str}}
+            </button>
+        </div>
+        
+        {{#groups}}
+        <div class="mb-1 mr-3">
+            <div class="btn-group" role="group" aria-label="{{name}}">
+                <button type="button" class="btn btn-secondary" disabled>
+                    {{name}}
+                </button>
+                {{#filters}}
+                <button type="button" class="btn btn-primary enhancedcourseoverview-filter" 
+                        id="{{id}}" data-action="filter-courses" data-filter-value="{{match}}" 
+                        aria-label="{{#str}}filtercourses, block_enhancedcourseoverview{{/str}} {{title}}"
+                        aria-pressed="false">
+                    {{title}}
+                </button>
+                {{/filters}}
+            </div>
+        </div>
+        {{/groups}}
+    </div>
+</div>
+{{/hasgroups}}

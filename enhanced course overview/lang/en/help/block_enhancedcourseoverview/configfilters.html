@@ -1,0 +1,32 @@
+<h2>Course Filters</h2>
+
+<p>This setting configures the filter buttons that will appear above the course list.</p>
+
+<p>The syntax for defining filters is as follows:</p>
+
+<ul>
+    <li>Empty lines are ignored</li>
+    <li>Lines without a pipe character (|) are treated as group headers</li>
+    <li>Lines with a pipe character have the format: <code>Filter Title|text_to_match</code></li>
+</ul>
+
+<p>Example:</p>
+
+<pre>
+2023-24
+Term 1|_A1_202324
+Term 2|_A2_202324
+
+2024-25
+Term 1|_A1_202425
+Term 2|_A2_202425
+</pre>
+
+<p>This will create two button groups:</p>
+
+<ul>
+    <li>Group "2023-24" with buttons "Term 1" and "Term 2"</li>
+    <li>Group "2024-25" with buttons "Term 1" and "Term 2"</li>
+</ul>
+
+<p>When a filter button is clicked, only courses containing the specified text in their name or description will be shown.</p>
