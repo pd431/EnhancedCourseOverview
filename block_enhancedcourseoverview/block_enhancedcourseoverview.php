@@ -320,24 +320,31 @@ protected function get_filter_javascript() {
         function filterCourses(patterns) {
             console.log('Filtering courses with patterns: ' + JSON.stringify(patterns));
             
-            // We need to handle different possible course item selectors
-            var courseItems = document.querySelectorAll('.course-card, .list-group-item.course-listitem, .course-summaryitem');
-            console.log('Found ' + courseItems.length + ' course items');
+            // Important: Select the parent columns rather than just the cards
+            var courseColumns = document.querySelectorAll('.col.d-flex.px-0.mb-2');
+            console.log('Found ' + courseColumns.length + ' course columns');
             
             var visibleCount = 0;
-            var totalCount = courseItems.length;
+            var totalCount = courseColumns.length;
             var matchResults = [];
             
             // If no active filters, show all courses
             if (patterns.length === 0) {
-                for (var i = 0; i < courseItems.length; i++) {
-                    courseItems[i].style.display = '';
+                for (var i = 0; i < courseColumns.length; i++) {
+                    courseColumns[i].style.display = '';
                     visibleCount++;
                 }
             } else {
                 // Filter courses based on patterns
-                for (var i = 0; i < courseItems.length; i++) {
-                    var courseItem = courseItems[i];
+                for (var i = 0; i < courseColumns.length; i++) {
+                    var courseColumn = courseColumns[i];
+                    var courseItem = courseColumn.querySelector('.course-card, .list-group-item.course-listitem, .course-summaryitem');
+                    
+                    if (!courseItem) {
+                        // Skip if no course item found in this column
+                        continue;
+                    }
+                    
                     var courseTitle = '';
                     
                     // Try different elements to find course title/content
@@ -387,17 +394,10 @@ protected function get_filter_javascript() {
                         visible: showCourse
                     });
                     
-                    courseItem.style.display = showCourse ? '' : 'none';
+                    // Hide/show the entire column, not just the course item
+                    courseColumn.style.display = showCourse ? '' : 'none';
                     if (showCourse) {
                         visibleCount++;
-                        
-                        // Highlight the matching pattern in the course item
-                        if (matches.length > 0) {
-                            // We could highlight the match, but for now let's keep it simple
-                            // courseItem.classList.add('filter-match-highlight');
-                        }
-                    } else {
-                        // courseItem.classList.remove('filter-match-highlight');
                     }
                 }
                 
@@ -421,11 +421,10 @@ protected function get_filter_javascript() {
         }
         
         // Initially update the course count (all courses)
-        var allCourseItems = document.querySelectorAll('.course-card, .list-group-item.course-listitem');
+        var allCourseItems = document.querySelectorAll('.col.d-flex.px-0.mb-2');
         if (allCourseItems.length > 0) {
             courseCountDiv.innerHTML = '';
         }
     });
     ";
-}
 }
