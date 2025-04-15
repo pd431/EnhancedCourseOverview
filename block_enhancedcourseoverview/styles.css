@@ -1,0 +1,142 @@
+/* Filter buttons styling */
+.enhanced-filters {
+    margin-bottom: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.enhanced-filters .btn-group {
+    margin-bottom: 0.5rem;
+    border: 1px solid #e5e5e5;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.filter-group-header {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    color: #495057;
+    border-right: 1px solid #dee2e6;
+}
+
+.filter-term-btn {
+    min-width: 80px;
+    position: relative;
+    border: none;
+    border-right: 1px solid #dee2e6;
+}
+
+.filter-term-btn:last-child {
+    border-right: none;
+}
+
+.filter-term-btn.active {
+    background-color: var(--primary, #1a73e8);
+    color: white;
+    border-color: var(--primary, #1a73e8);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.filter-term-btn.active::after {
+    content: "✓";
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background-color: green;
+    color: white;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+}
+
+/* Count of visible courses */
+.course-count-indicator {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    color: #666;
+    background-color: #f8f9fa;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+/* Make sure buttons have appropriate padding */
+.enhanced-filters .btn {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    border-radius: 0;
+    transition: all 0.2s;
+}
+
+.enhanced-filters .btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    z-index: 1;
+}
+
+/* Debug info styling */
+.filter-debug-info {
+    margin: 15px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+.toggle-debug-btn {
+    margin-bottom: 10px;
+}
+
+/* Loading indicator */
+.courses-loading-indicator {
+    display: none;
+    padding: 1rem;
+    text-align: center;
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+    margin: 1rem 0;
+}
+
+.courses-loading-indicator.active {
+    display: block;
+}
+
+/* Ensure courses are displayed properly */
+[data-region="course-items"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+/* Highlight filter matches */
+.filter-match-highlight {
+    background-color: rgba(255, 255, 0, 0.2);
+    border-radius: 2px;
+    padding: 1px 2px;
+}
+
+/* For very narrow screens, make filter buttons wrap nicely */
+@media (max-width: 576px) {
+    .enhanced-filters .btn-group {
+        display: flex;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    
+    .enhanced-filters .btn-group .btn {
+        margin-bottom: 0;
+        border-right: none;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .enhanced-filters .btn-group .btn:last-child {
+        border-bottom: none;
+    }
+}

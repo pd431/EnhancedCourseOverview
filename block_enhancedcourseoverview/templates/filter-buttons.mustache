@@ -1,0 +1,125 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template block_enhancedcourseoverview/filter-buttons
+
+    Template for rendering filter buttons
+
+    Example context (json):
+    {
+        "filtergroups": [
+            {
+                "name": "2023-24",
+                "filters": [
+                    {
+                        "title": "Term 1",
+                        "pattern": "_A1_202324"
+                    },
+                    {
+                        "title": "Term 2",
+                        "pattern": "_A2_202324"
+                    }
+                ]
+            },
+            {
+                "name": "2024-25",
+                "filters": [
+                    {
+                        "title": "Term 1",
+                        "pattern": "_A1_202425"
+                    },
+                    {
+                        "title": "Term 2",
+                        "pattern": "_A2_202425"
+                    }
+                ]
+            }
+        ]
+    }
+}}
+
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template block_enhancedcourseoverview/filter-buttons
+
+    Template for rendering filter buttons
+
+    Example context (json):
+    {
+        "filtergroups": [
+            {
+                "name": "2023-24",
+                "filters": [
+                    {
+                        "title": "Term 1",
+                        "pattern": "_A_1_202324"
+                    },
+                    {
+                        "title": "Term 2",
+                        "pattern": "_A_2_202324"
+                    }
+                ]
+            },
+            {
+                "name": "2024-25",
+                "filters": [
+                    {
+                        "title": "Term 1",
+                        "pattern": "_A_1_202425"
+                    },
+                    {
+                        "title": "Term 2",
+                        "pattern": "_A_2_202425"
+                    }
+                ]
+            }
+        ]
+    }
+}}
+
+<div class="enhanced-filters mb-3">
+    {{#filtergroups}}
+    <div class="btn-group mb-1">
+        <button type="button" class="btn btn-outline-secondary filter-group-header" disabled>{{name}}</button>
+        {{#filters}}
+        <button type="button" class="btn btn-outline-secondary filter-term-btn" data-group="{{name}}" data-pattern="{{pattern}}">{{title}}</button>
+        {{/filters}}
+    </div>
+    {{/filtergroups}}
+    
+    {{^filtergroups}}
+    <div class="alert alert-warning">
+        <strong>No filter groups were defined or they were not parsed correctly.</strong>
+        <p>Please check the plugin settings and make sure the filter definitions are properly formatted.</p>
+    </div>
+    {{/filtergroups}}
+</div>
