@@ -28,11 +28,13 @@
                 "filters": [
                     {
                         "title": "Term 1",
-                        "pattern": "_A_1_202324"
+                        "pattern": "_A_1_202324",
+                        "isdefault": false
                     },
                     {
                         "title": "Term 2",
-                        "pattern": "_A_2_202324"
+                        "pattern": "_A_2_202324",
+                        "isdefault": true
                     }
                 ]
             }
@@ -41,10 +43,10 @@
 }}
 <div class="enhanced-filters mb-3" id="{{uniqid}}">
     {{#filtergroups}}
-    <div class="btn-group mb-1">
-        <button type="button" class="btn btn-outline-secondary filter-group-header" disabled>{{name}}</button>
+    <div class="btn-group btn-group-sm mb-1">
+        <button type="button" class="btn btn-outline-secondary filter-group-toggle" data-group="{{name}}" aria-pressed="false">{{name}}</button>
         {{#filters}}
-        <button type="button" class="btn btn-outline-secondary filter-term-btn" data-group="{{name}}" data-pattern="{{pattern}}">{{title}}</button>
+        <button type="button" class="btn btn-outline-secondary filter-term-btn{{#isdefault}} active{{/isdefault}}" data-group="{{name}}" data-pattern="{{pattern}}" aria-pressed="{{#isdefault}}true{{/isdefault}}{{^isdefault}}false{{/isdefault}}">{{title}}</button>
         {{/filters}}
     </div>
     {{/filtergroups}}

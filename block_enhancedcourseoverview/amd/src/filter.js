@@ -18,7 +18,9 @@
  *
  * Filters the courses rendered by block_myoverview by toggling the
  * visibility of course cards/list items whose name matches one of the
- * active filter patterns.
+ * active filter patterns. Filter groups whose patterns match none of the
+ * currently loaded courses are hidden, and a group's header button toggles
+ * every filter within that group at once.
  *
  * @module     block_enhancedcourseoverview/filter
  * @copyright  2023 Your Name <your.email@example.com>
@@ -29,6 +31,8 @@ import Str from 'core/str';
 
 const SELECTORS = {
     FILTER_BUTTON: '.filter-term-btn',
+    GROUP_TOGGLE: '.filter-group-toggle',
+    GROUP: '.btn-group',
     LOAD_MORE_BUTTON: '[data-action="more-courses"]',
     COURSE_CONTENT: '[data-region="course-content"]',
     COURSE_ITEM: '.course-card, .list-group-item.course-listitem',
@@ -68,7 +72,7 @@ class CourseFilter {
     /**
      * @param {Element} root The block instance's root element.
      * @param {Element} filterContainer The container holding the filter buttons.
-     * @param {Object} strings Localised strings, keyed by 'loading' and 'nomatches'.
+     * @param {Object} strings Localised strings, keyed by 'loading', 'nomatches' and 'showing'.
      */
     constructor(root, filterContainer, strings) {
         this.root = root;
@@ -81,6 +85,14 @@ class CourseFilter {
         this.countIndicator = document.createElement('div');
         this.countIndicator.className = 'course-count-indicator';
         filterContainer.insertAdjacentElement('afterend', this.countIndicator);
+
+        if (this.courseContent) {
+            // Courses can be added later, either by a user manually paging
+            // through "load more", or by our own loadAllCourses(). Either
+            // way, re-check which filter groups are still relevant.
+            this.visibilityObserver = new MutationObserver(() => this.updateGroupVisibility());
+            this.visibilityObserver.observe(this.courseContent, {childList: true, subtree: true});
+        }
     }
 
     /**
@@ -121,6 +133,43 @@ class CourseFilter {
         }
 
         this.allLoaded = true;
+    }
+
+    /**
+     * Get the display text used to match each currently loaded course
+     * against filter patterns.
+     *
+     * @return {String[]}
+     */
+    getCourseNames() {
+        const names = Array.from(this.root.querySelectorAll(SELECTORS.COURSE_NAME), el => el.textContent || '');
+        if (names.length) {
+            return names;
+        }
+
+        // No dedicated course name element found, fall back to the whole card.
+        return Array.from(this.root.querySelectorAll(SELECTORS.COURSE_ITEM), el => el.textContent || '');
+    }
+
+    /**
+     * Hide filter groups whose patterns match none of the currently loaded
+     * courses, and show groups that do have at least one match. This only
+     * considers courses already present in the DOM: on a paginated
+     * dashboard, a group may reappear once more courses are loaded.
+     */
+    updateGroupVisibility() {
+        const courseNames = this.getCourseNames();
+
+        this.filterContainer.querySelectorAll(SELECTORS.GROUP).forEach(group => {
+            const patterns = Array.from(
+                group.querySelectorAll(SELECTORS.FILTER_BUTTON),
+                button => button.getAttribute('data-pattern')
+            );
+            const hasMatch = patterns.some(
+                pattern => courseNames.some(name => name.indexOf(pattern) !== -1)
+            );
+            group.classList.toggle('enhancedcourseoverview-group-hidden', !hasMatch);
+        });
     }
 
     /**
@@ -183,9 +232,37 @@ class CourseFilter {
     }
 
     /**
-     * Handle a filter button being toggled.
+     * Update each button's aria-pressed attribute, and each group header's
+     * active/indeterminate styling, to reflect the current active buttons.
      */
-    async onFilterToggled() {
+    syncButtonStates() {
+        this.filterContainer.querySelectorAll(SELECTORS.FILTER_BUTTON).forEach(button => {
+            button.setAttribute('aria-pressed', button.classList.contains('active') ? 'true' : 'false');
+        });
+
+        this.filterContainer.querySelectorAll(SELECTORS.GROUP).forEach(group => {
+            const buttons = group.querySelectorAll(SELECTORS.FILTER_BUTTON);
+            const toggle = group.querySelector(SELECTORS.GROUP_TOGGLE);
+            if (!toggle || buttons.length === 0) {
+                return;
+            }
+            const activeCount = group.querySelectorAll(`${SELECTORS.FILTER_BUTTON}.active`).length;
+            toggle.classList.toggle('active', activeCount === buttons.length);
+            toggle.classList.toggle('filter-group-toggle-partial', activeCount > 0 && activeCount < buttons.length);
+            toggle.setAttribute('aria-pressed', activeCount === buttons.length ? 'true' : 'false');
+        });
+    }
+
+    /**
+     * Re-read which filter buttons are currently active and re-apply
+     * filtering accordingly. Used both after a user interaction and once at
+     * startup, to pick up any filters marked active by default.
+     *
+     * @return {Promise}
+     */
+    async refresh() {
+        this.syncButtonStates();
+
         const active = this.filterContainer.querySelectorAll(`${SELECTORS.FILTER_BUTTON}.active`);
         const patterns = Array.from(active, button => button.getAttribute('data-pattern'));
 
@@ -232,7 +309,21 @@ export const init = async(uniqid) => {
         button.addEventListener('click', event => {
             event.preventDefault();
             button.classList.toggle('active');
-            filter.onFilterToggled();
+            filter.refresh();
         });
     });
+
+    filterContainer.querySelectorAll(SELECTORS.GROUP_TOGGLE).forEach(toggle => {
+        toggle.addEventListener('click', event => {
+            event.preventDefault();
+            const group = toggle.closest(SELECTORS.GROUP);
+            const buttons = group.querySelectorAll(SELECTORS.FILTER_BUTTON);
+            const allActive = Array.from(buttons).every(button => button.classList.contains('active'));
+            buttons.forEach(button => button.classList.toggle('active', !allActive));
+            filter.refresh();
+        });
+    });
+
+    filter.updateGroupVisibility();
+    await filter.refresh();
 };

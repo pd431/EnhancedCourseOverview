@@ -46,3 +46,8 @@ Filter Title 2|Pattern to Match
 </pre>
 Each line without a pipe (|) character starts a new group. Lines with pipes define a filter button, where the text before the pipe is the button label and the text after is the pattern to match in course titles.<br><br>
 <strong>Pattern Matching:</strong> The pattern will match if it appears anywhere in the course title or code. For example, to match Term 1 courses with codes like "WIN1001_A_1_202425", you could use "_A_1_" as the pattern.';
+
+$string['settings:yeargenerator'] = 'Year generator';
+$string['settings:yeargenerator_desc'] = 'Automatically generate a group of term filters for each academic year in a range, so you don\'t need to hand-write a new block of filters every year.';
+$string['settings:defaultpatterns'] = 'Default active filters';
+$string['settings:defaultpatterns_desc'] = 'Comma or newline separated list of exact patterns (matching the pattern column above, not the button title) that should already be active when a user opens their dashboard, for example the current term. Leave empty for no default. Applies every time the block renders, it is not a per-user preference.';
