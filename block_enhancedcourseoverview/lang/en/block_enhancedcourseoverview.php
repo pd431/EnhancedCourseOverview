@@ -26,6 +26,11 @@ $string['pluginname'] = 'Enhanced Course Overview';
 $string['enhancedcourseoverview:addinstance'] = 'Add a new Enhanced Course Overview block';
 $string['enhancedcourseoverview:myaddinstance'] = 'Add a new Enhanced Course Overview block to Dashboard';
 
+// JavaScript strings.
+$string['filter:loading'] = 'Loading all courses...';
+$string['filter:nomatches'] = 'No courses match the selected filters.';
+$string['filter:showing'] = 'Showing {visible} of {total} courses';
+
 // Settings
 $string['settings:heading'] = 'Filter Configuration';
 $string['settings:heading_desc'] = 'Configure the filters that will be displayed above the courses.';

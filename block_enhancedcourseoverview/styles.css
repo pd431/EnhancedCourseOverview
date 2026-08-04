@@ -81,47 +81,6 @@
     z-index: 1;
 }
 
-/* Debug info styling */
-.filter-debug-info {
-    margin: 15px 0;
-    padding: 10px;
-    background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-}
-
-.toggle-debug-btn {
-    margin-bottom: 10px;
-}
-
-/* Loading indicator */
-.courses-loading-indicator {
-    display: none;
-    padding: 1rem;
-    text-align: center;
-    background-color: #f8f9fa;
-    border-radius: 0.25rem;
-    margin: 1rem 0;
-}
-
-.courses-loading-indicator.active {
-    display: block;
-}
-
-/* Ensure courses are displayed properly */
-[data-region="course-items"] {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-
-/* Highlight filter matches */
-.filter-match-highlight {
-    background-color: rgba(255, 255, 0, 0.2);
-    border-radius: 2px;
-    padding: 1px 2px;
-}
-
 /* For very narrow screens, make filter buttons wrap nicely */
 @media (max-width: 576px) {
     .enhanced-filters .btn-group {

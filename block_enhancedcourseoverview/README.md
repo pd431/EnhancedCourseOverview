@@ -6,7 +6,7 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 
 - Simple text-based filters configured through the plugin settings
 - Filter buttons organized in groups
-- No AMD modules required - works with simple JavaScript
+- JavaScript ships as a proper AMD module (`block_enhancedcourseoverview/filter`), scoped per block instance
 - Maintains all original Course Overview block functionality
 
 ## Installation
@@ -15,6 +15,7 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 2. Create a folder called `enhancedcourseoverview` in your Moodle `blocks` directory
 3. Extract the plugin files into this directory
 4. Visit your Moodle site as an administrator to complete the installation
+5. Recommended: from your Moodle root, run `grunt amd --root=blocks/enhancedcourseoverview` to regenerate `amd/build/filter.min.js` with Moodle's own build tooling. The committed build file is a hand-written equivalent kept for out-of-the-box use, but a proper Grunt build is the canonical minified/versioned artifact.
 
 ## Configuration
 
