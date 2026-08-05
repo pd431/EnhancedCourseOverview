@@ -32,9 +32,6 @@ require_once($CFG->dirroot . '/blocks/myoverview/block_myoverview.php');
  */
 class block_enhancedcourseoverview extends block_myoverview {
 
-    /** @var int Safety cap on the number of years a single generator line may produce. */
-    const MAX_GENERATED_YEARS = 50;
-
     /**
      * Initialize the block.
      */
@@ -68,13 +65,9 @@ class block_enhancedcourseoverview extends block_myoverview {
             return null;
         }
 
-        $manualgroups = $this->parse_filter_definitions(
+        $filtergroups = $this->parse_filter_definitions(
             get_config('block_enhancedcourseoverview', 'filterdefinitions')
         );
-        $generatedgroups = $this->generate_year_groups(
-            get_config('block_enhancedcourseoverview', 'yeargenerator')
-        );
-        $filtergroups = array_merge($manualgroups, $generatedgroups);
 
         if (empty($filtergroups)) {
             return $this->content;
@@ -173,97 +166,11 @@ class block_enhancedcourseoverview extends block_myoverview {
     }
 
     /**
-     * Generate year-based filter groups from template definitions, so admins
-     * don't need to hand-write a block of filters for every new academic year.
-     *
-     * Each line has the format:
-     *   startyear|endyear|termcount|title template|pattern template
-     *
-     * Title and pattern templates may use the placeholders:
-     *   {n}  - the term number (1-based)
-     *   {ay} - the full academic year, e.g. 202324
-     *   {y1} - the start year, e.g. 2023
-     *   {y2} - the two-digit end year, e.g. 24
-     *
-     * Example: 2023|2026|3|Term {n}|_A_{n}_{ay}
-     * generates groups "2023-24".."2026-27", each with Term 1..3 filters
-     * matching patterns like "_A_1_202324".
-     *
-     * @param string $generatordefs The raw generator definitions from the settings.
-     * @return array The generated filter groups, each with a 'name' and a list of 'filters'.
-     */
-    protected function generate_year_groups($generatordefs) {
-        if (empty($generatordefs)) {
-            return [];
-        }
-
-        $generatordefs = str_replace(["\r\n", "\r"], "\n", $generatordefs);
-        $lines = explode("\n", $generatordefs);
-
-        $groups = [];
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-
-            if ($line === '' || strpos($line, '|') === false) {
-                continue;
-            }
-
-            $parts = array_pad(explode('|', $line, 5), 5, '');
-            [$startyear, $endyear, $termcount, $titletemplate, $patterntemplate] = $parts;
-
-            $startyear = (int) trim($startyear);
-            $endyear = (int) trim($endyear);
-            $termcount = (int) trim($termcount);
-            $titletemplate = trim($titletemplate);
-            $patterntemplate = trim($patterntemplate);
-
-            if ($startyear <= 0 || $endyear < $startyear || $termcount <= 0
-                    || $titletemplate === '' || $patterntemplate === '') {
-                continue;
-            }
-
-            if (($endyear - $startyear + 1) > self::MAX_GENERATED_YEARS) {
-                $endyear = $startyear + self::MAX_GENERATED_YEARS - 1;
-            }
-
-            for ($year = $startyear; $year <= $endyear; $year++) {
-                $y1 = (string) $year;
-                $y2 = str_pad((string) (($year + 1) % 100), 2, '0', STR_PAD_LEFT);
-                $ay = $y1 . $y2;
-                $groupname = $y1 . '-' . $y2;
-
-                $filters = [];
-                for ($term = 1; $term <= $termcount; $term++) {
-                    $replacements = [
-                        '{n}' => $term,
-                        '{ay}' => $ay,
-                        '{y1}' => $y1,
-                        '{y2}' => $y2,
-                    ];
-                    $filters[] = [
-                        'title' => strtr($titletemplate, $replacements),
-                        'pattern' => strtr($patterntemplate, $replacements),
-                    ];
-                }
-
-                $groups[] = [
-                    'name' => $groupname,
-                    'filters' => $filters,
-                ];
-            }
-        }
-
-        return $groups;
-    }
-
-    /**
      * Mark which filters should be active by default, based on the
      * defaultpatterns setting (a comma/newline separated list of exact
      * pattern strings).
      *
-     * @param array $filtergroups The filter groups produced by parse_filter_definitions()
-     *                            and/or generate_year_groups().
+     * @param array $filtergroups The filter groups produced by parse_filter_definitions().
      * @return array The same groups, with each filter tagged with 'isdefault'.
      */
     protected function mark_default_filters(array $filtergroups) {

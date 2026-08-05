@@ -32,40 +32,20 @@ if ($ADMIN->fulltree) {
         get_string('settings:heading_desc', 'block_enhancedcourseoverview')
     ));
     
-    // Manual filter definitions. Kept separate from the year generator below
-    // so admins can still hand-define one-off groups that aren't year-based.
-    $examplefilters = "Custom group\nOnline only|_ONLINE_\nEvening|_EVE_";
+    // Filter definitions.
+    $defaultfilters = "2023-24\nTerm 1|_A_1_202324\nTerm 2|_A_2_202324\nTerm 3|_A_3_202324\n\n2024-25\nTerm 1|_A_1_202425\nTerm 2|_A_2_202425\nTerm 3|_A_3_202425\n\n2025-26\nTerm 1|_A_1_202526\nTerm 2|_A_2_202526\nTerm 3|_A_3_202526\n\n2026-27\nTerm 1|_A_1_202627\nTerm 2|_A_2_202627\nTerm 3|_A_3_202627";
 
     $description = get_string('settings:filterdefinitions_desc', 'block_enhancedcourseoverview') .
                   '<br><br><strong>Format:</strong><pre>' .
-                  htmlspecialchars($examplefilters) . '</pre>' .
-                  '<br><strong>Note:</strong> Each line without a pipe (|) starts a new group; lines with a pipe define a filter button within it. Leave an empty line between groups.' .
-                  '<br><strong>Tip:</strong> For year-based groups (2023-24, 2024-25, ...), use the year generator below instead of typing them out by hand.';
+                  htmlspecialchars($defaultfilters) . '</pre>' .
+                  '<br><strong>Note:</strong> Make sure each group name (like "2023-24") appears on its own line, followed by filter definitions in the format "Term X|_A_X_YYYY". There should be an empty line between groups.' .
+                  '<br><strong>Pattern Explanation:</strong> The pattern should match your institution\'s course code format, where "_A_1_202324" matches courses from Term 1 in 2023-24, etc.';
 
     $settings->add(new admin_setting_configtextarea(
         'block_enhancedcourseoverview/filterdefinitions',
         get_string('settings:filterdefinitions', 'block_enhancedcourseoverview'),
         $description,
-        '',
-        PARAM_RAW
-    ));
-
-    // Year generator: builds one group per academic year automatically,
-    // so a new year doesn't require editing the settings by hand.
-    $defaultgenerator = "2023|2026|3|Term {n}|_A_{n}_{ay}";
-
-    $generatordescription = get_string('settings:yeargenerator_desc', 'block_enhancedcourseoverview') .
-                  '<br><br><strong>Format (one line per range):</strong><pre>startyear|endyear|termcount|title template|pattern template</pre>' .
-                  '<strong>Example:</strong><pre>' . htmlspecialchars($defaultgenerator) . '</pre>' .
-                  'This generates groups "2023-24" through "2026-27", each with Term 1, Term 2 and Term 3 buttons matching patterns like "_A_1_202324".' .
-                  '<br><br><strong>Placeholders:</strong> <code>{n}</code> term number, <code>{ay}</code> full academic year (e.g. 202324), ' .
-                  '<code>{y1}</code> start year (e.g. 2023), <code>{y2}</code> two-digit end year (e.g. 24).';
-
-    $settings->add(new admin_setting_configtextarea(
-        'block_enhancedcourseoverview/yeargenerator',
-        get_string('settings:yeargenerator', 'block_enhancedcourseoverview'),
-        $generatordescription,
-        $defaultgenerator,
+        $defaultfilters,
         PARAM_RAW
     ));
 

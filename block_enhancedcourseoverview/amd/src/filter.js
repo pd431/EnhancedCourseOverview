@@ -18,9 +18,11 @@
  *
  * Filters the courses rendered by block_myoverview by toggling the
  * visibility of course cards/list items whose name matches one of the
- * active filter patterns. Filter groups whose patterns match none of the
- * currently loaded courses are hidden, and a group's header button toggles
- * every filter within that group at once.
+ * active filter patterns. On init, every course is loaded (via the "load
+ * more" button, if present) before filter groups with no matches are
+ * hidden, so that decision is made once against the full course list
+ * rather than flickering as pages stream in. A group's header button
+ * toggles every filter within that group at once.
  *
  * @module     block_enhancedcourseoverview/filter
  * @copyright  2023 Your Name <your.email@example.com>
@@ -85,14 +87,6 @@ class CourseFilter {
         this.countIndicator = document.createElement('div');
         this.countIndicator.className = 'course-count-indicator';
         filterContainer.insertAdjacentElement('afterend', this.countIndicator);
-
-        if (this.courseContent) {
-            // Courses can be added later, either by a user manually paging
-            // through "load more", or by our own loadAllCourses(). Either
-            // way, re-check which filter groups are still relevant.
-            this.visibilityObserver = new MutationObserver(() => this.updateGroupVisibility());
-            this.visibilityObserver.observe(this.courseContent, {childList: true, subtree: true});
-        }
     }
 
     /**
@@ -116,23 +110,32 @@ class CourseFilter {
 
     /**
      * Repeatedly click the "load more courses" button, if present, until all
-     * pages of courses have been loaded into the DOM.
+     * pages of courses have been loaded into the DOM. Safe to call
+     * concurrently (e.g. once eagerly on init and once from a user's filter
+     * click before the eager load has finished) - callers share the same
+     * in-flight load rather than each clicking "load more" independently.
      *
      * @return {Promise}
      */
-    async loadAllCourses() {
+    loadAllCourses() {
         if (this.allLoaded || !this.courseContent) {
-            return;
+            return Promise.resolve();
         }
 
-        let loadMoreButton = this.root.querySelector(SELECTORS.LOAD_MORE_BUTTON);
-        while (loadMoreButton) {
-            loadMoreButton.click();
-            await waitForUpdate(this.courseContent, LOAD_MORE_TIMEOUT_MS);
-            loadMoreButton = this.root.querySelector(SELECTORS.LOAD_MORE_BUTTON);
+        if (!this.loadPromise) {
+            this.loadPromise = (async() => {
+                let loadMoreButton = this.root.querySelector(SELECTORS.LOAD_MORE_BUTTON);
+                while (loadMoreButton) {
+                    loadMoreButton.click();
+                    await waitForUpdate(this.courseContent, LOAD_MORE_TIMEOUT_MS);
+                    loadMoreButton = this.root.querySelector(SELECTORS.LOAD_MORE_BUTTON);
+                }
+                this.allLoaded = true;
+                this.loadPromise = null;
+            })();
         }
 
-        this.allLoaded = true;
+        return this.loadPromise;
     }
 
     /**
@@ -153,9 +156,10 @@ class CourseFilter {
 
     /**
      * Hide filter groups whose patterns match none of the currently loaded
-     * courses, and show groups that do have at least one match. This only
-     * considers courses already present in the DOM: on a paginated
-     * dashboard, a group may reappear once more courses are loaded.
+     * courses, and show groups that do have at least one match. Called once,
+     * after loadAllCourses() has resolved, so the decision reflects the
+     * complete course list rather than whatever page happened to be loaded
+     * first.
      */
     updateGroupVisibility() {
         const courseNames = this.getCourseNames();
@@ -324,6 +328,15 @@ export const init = async(uniqid) => {
         });
     });
 
+    // Load every course up front so which groups have matches can be
+    // determined accurately, instead of guessing from just the first page
+    // and revising that guess (visibly) as more courses stream in. This is
+    // a no-op if there's no "load more" button, i.e. everything is already
+    // on the page.
+    if (root.querySelector(SELECTORS.LOAD_MORE_BUTTON)) {
+        filter.countIndicator.textContent = loading;
+    }
+    await filter.loadAllCourses();
     filter.updateGroupVisibility();
     await filter.refresh();
 };

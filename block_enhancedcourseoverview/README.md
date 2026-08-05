@@ -4,9 +4,10 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 
 ## Features
 
-- Simple text-based filters configured through the plugin settings, plus an optional generator that builds a group of term filters for every academic year in a range automatically
+- Simple text-based filters configured through the plugin settings
 - Filter buttons organized in groups; click a group's header to toggle every filter in that group at once
-- Groups with no matching courses among those currently loaded are hidden automatically, so the filter bar doesn't clutter the dashboard with irrelevant years
+- On load, every course is fetched (via the dashboard's own "load more" button, if present) before deciding which filter groups have matches, so a group is never wrongly hidden just because its only matching course hadn't loaded yet
+- Groups with no matching courses are hidden automatically, so the filter bar doesn't clutter the dashboard with irrelevant years
 - One or more filters can be configured to be active by default when a user opens their dashboard
 - JavaScript ships as a proper AMD module (`block_enhancedcourseoverview/filter`), scoped per block instance
 - Maintains all original Course Overview block functionality
@@ -21,11 +22,9 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 
 ## Configuration
 
-Go to Site Administration > Plugins > Blocks > Enhanced Course Overview. There are three settings:
+Go to Site Administration > Plugins > Blocks > Enhanced Course Overview. There are two settings:
 
-### Filter Definitions (manual groups)
-
-For one-off, non-year-based groups. Format:
+### Filter Definitions
 
 ```
 Group Name
@@ -36,36 +35,22 @@ Filter Title|Pattern to Match
 Filter Title 2|Pattern to Match
 ```
 
-Each line without a pipe (|) character starts a new group. Lines with pipes define a filter button, where the text before the pipe is the button label and the text after is the pattern to match in course titles.
+Each line without a pipe (|) character starts a new group. Lines with pipes define a filter button, where the text before the pipe is the button label and the text after is the pattern to match in course titles. Leave an empty line between groups.
 
 Example:
 ```
-Custom group
-Online only|_ONLINE_
-Evening|_EVE_
+2023-24
+Term 1|_A_1_202324
+Term 2|_A_2_202324
+Term 3|_A_3_202324
+
+2024-25
+Term 1|_A_1_202425
+Term 2|_A_2_202425
+Term 3|_A_3_202425
 ```
 
-### Year generator
-
-Generates a group per academic year automatically, so a new year doesn't require editing settings by hand. One line per range:
-
-```
-startyear|endyear|termcount|title template|pattern template
-```
-
-Placeholders available in the title/pattern templates:
-- `{n}` - the term number (1-based)
-- `{ay}` - the full academic year, e.g. `202324`
-- `{y1}` - the start year, e.g. `2023`
-- `{y2}` - the two-digit end year, e.g. `24`
-
-Example:
-```
-2023|2026|3|Term {n}|_A_{n}_{ay}
-```
-generates groups "2023-24" through "2026-27", each with Term 1, Term 2 and Term 3 buttons matching patterns like `_A_1_202324`. To add a new year, just bump the end year (e.g. `2023|2027|3|...` to include 2027-28) instead of writing a new block of lines.
-
-Manually-defined groups and generated groups are combined; both are shown together.
+To add a new year, add a new block of lines following the same pattern (there's no auto-generation — this is entirely manual by design, so it's easy to read and predict).
 
 ### Default active filters
 
@@ -83,7 +68,7 @@ This applies every time the block renders — it is not a per-user preference th
 2. Use the filter buttons to show only courses matching specific patterns
 3. Click a button to activate the filter, click again to deactivate; click a group's header to toggle the whole group
 4. Multiple filters can be active simultaneously (OR logic)
-5. Groups with no matches among the currently loaded courses are hidden; they reappear if more courses are loaded (e.g. via "load more") that do match
+5. When the block loads, it fetches every page of courses (if the dashboard paginates via a "load more" button) before deciding which filter groups have at least one match. Groups with no matches are hidden. This means there can be a brief "Loading all courses..." moment right after the dashboard loads on sites with many courses, since every course is being loaded up front rather than only when a filter is clicked.
 
 ## Requirements
 
