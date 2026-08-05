@@ -16,13 +16,21 @@
 /**
  * Course filter buttons for the Enhanced Course Overview block.
  *
- * Filters the courses rendered by block_myoverview by toggling the
- * visibility of course cards/list items whose name matches one of the
- * active filter patterns. On init, every course is loaded (via the "load
- * more" button, if present) before filter groups with no matches are
- * hidden, so that decision is made once against the full course list
- * rather than flickering as pages stream in. A group's header button
- * toggles every filter within that group at once.
+ * block_myoverview renders only a loading skeleton server-side; the actual
+ * course cards, and its pagination (a "Show N / All" items-per-page
+ * dropdown plus a Next/Previous paging bar - there is no "load more"
+ * button), are built entirely client-side by block_myoverview's own AMD
+ * module (core/paged_content_*) after an AJAX call. This module first waits
+ * for that initial render, then - to decide accurately which filter groups
+ * have matches, and to filter across every course rather than just the
+ * active page - drives that same pagination: it selects "Show all" when
+ * available (courses up to Moodle's own cap of 100, above which the option
+ * isn't offered), otherwise clicks "Next" until it's exhausted. Because
+ * block_myoverview keeps every page it has fetched in the DOM (hiding
+ * inactive ones with a "hidden" class rather than removing them), once
+ * loaded this module can filter across all of them by temporarily lifting
+ * that hidden state, and puts it back exactly as block_myoverview left it
+ * once every filter is cleared.
  *
  * @module     block_enhancedcourseoverview/filter
  * @copyright  2023 Your Name <your.email@example.com>
@@ -35,18 +43,27 @@ const SELECTORS = {
     FILTER_BUTTON: '.filter-term-btn',
     GROUP_TOGGLE: '.filter-group-toggle',
     GROUP: '.btn-group',
-    LOAD_MORE_BUTTON: '[data-action="more-courses"]',
-    COURSE_CONTENT: '[data-region="course-content"]',
-    COURSE_ITEM: '.course-card, .list-group-item.course-listitem',
+    COURSES_VIEW: '[data-region="courses-view"]',
+    PAGING_BAR: '[data-region="paging-bar"]',
+    PAGING_CONTROLS: '[data-region="paging-control-container"]',
+    NEXT_CONTROL: '[data-control="next"]',
+    PAGE_LINK: '[data-region="page-link"]',
+    LIMIT_ALL_OPTION: '[data-limit="0"]',
+    PAGE: '[data-region="paged-content-page"]',
+    COURSE_ITEM: '[data-region="course-content"]',
     COURSE_NAME: '.coursename',
     COLUMN: '.col.d-flex, .col',
 };
 
-const LOAD_MORE_TIMEOUT_MS = 5000;
+const AJAX_SETTLE_TIMEOUT_MS = 8000;
+const INITIAL_RENDER_TIMEOUT_MS = 15000;
+const INITIAL_RENDER_POLL_MS = 150;
+const MAX_NEXT_CLICKS = 500;
 
 /**
- * Wait until the course content region has finished mutating after a
- * "load more" click, or until a timeout elapses.
+ * Wait until an element's subtree stops mutating (e.g. after Moodle's own
+ * pagination fetches and renders a page via AJAX), or until a timeout
+ * elapses.
  *
  * @param {Element} target Element to observe for new content.
  * @param {Number} timeout Maximum time to wait, in milliseconds.
@@ -68,21 +85,50 @@ const waitForUpdate = (target, timeout) => new Promise(resolve => {
 });
 
 /**
+ * Poll for block_myoverview's own AJAX-rendered course markup (course
+ * cards/list items, a paging bar, or - if the user has no courses - neither
+ * ever appears) before this module touches anything, since none of it
+ * exists in the server-rendered placeholder skeleton.
+ *
+ * @param {Element} coursesView The block's [data-region="courses-view"] element.
+ * @return {Promise}
+ */
+const waitForInitialRender = coursesView => new Promise(resolve => {
+    const start = Date.now();
+    const check = () => {
+        if (coursesView.querySelector(`${SELECTORS.COURSE_ITEM}, ${SELECTORS.PAGING_BAR}`)) {
+            resolve();
+            return;
+        }
+        if (Date.now() - start > INITIAL_RENDER_TIMEOUT_MS) {
+            // Gives up rather than hangs - e.g. the user has no courses at
+            // all, so neither a card/list item nor a paging bar will ever
+            // appear.
+            resolve();
+            return;
+        }
+        setTimeout(check, INITIAL_RENDER_POLL_MS);
+    };
+    check();
+});
+
+/**
  * Controller for a single block instance's filter UI.
  */
 class CourseFilter {
     /**
-     * @param {Element} root The block instance's root element.
+     * @param {Element} coursesView The block_myoverview [data-region="courses-view"] element.
      * @param {Element} filterContainer The container holding the filter buttons.
      * @param {Object} strings Localised strings, keyed by 'loading', 'nomatches' and 'showing'.
      */
-    constructor(root, filterContainer, strings) {
-        this.root = root;
+    constructor(coursesView, filterContainer, strings) {
+        this.coursesView = coursesView;
         this.filterContainer = filterContainer;
         this.strings = strings;
-        this.courseContent = root.querySelector(SELECTORS.COURSE_CONTENT);
         this.allLoaded = false;
-        this.originalLayout = null;
+        this.loadPromise = null;
+        this.filtering = false;
+        this.originalActivePage = null;
 
         this.countIndicator = document.createElement('div');
         this.countIndicator.className = 'course-count-indicator';
@@ -90,52 +136,101 @@ class CourseFilter {
     }
 
     /**
-     * Remember the untouched course list markup so it can be restored once
-     * every filter is deactivated.
+     * Record block_myoverview's own pagination state before this module
+     * starts flattening pages together for filtering, so it can be restored
+     * exactly once every filter is cleared.
      */
     saveLayout() {
-        if (this.originalLayout === null && this.courseContent) {
-            this.originalLayout = this.courseContent.innerHTML;
+        if (this.filtering) {
+            return;
         }
+        this.filtering = true;
+
+        const pagingBar = this.coursesView.querySelector(SELECTORS.PAGING_BAR);
+        this.originalActivePage = pagingBar ? pagingBar.getAttribute('data-active-page-number') : null;
     }
 
     /**
-     * Restore the course list to its state before any filter was applied.
+     * Undo saveLayout(): put block_myoverview's pagination back to showing
+     * only the page that was active before filtering started, and clear any
+     * display overrides this module made on individual course columns.
      */
     restoreLayout() {
-        if (this.courseContent && this.originalLayout !== null) {
-            this.courseContent.innerHTML = this.originalLayout;
+        if (!this.filtering) {
+            return;
+        }
+        this.filtering = false;
+
+        this.coursesView.querySelectorAll(SELECTORS.COURSE_ITEM).forEach(card => {
+            const column = card.closest(SELECTORS.COLUMN) || card;
+            column.style.removeProperty('display');
+        });
+
+        if (this.originalActivePage !== null) {
+            this.coursesView.querySelectorAll(SELECTORS.PAGE).forEach(page => {
+                page.classList.toggle('hidden', page.getAttribute('data-page') !== this.originalActivePage);
+            });
+        }
+
+        const pagingControls = this.coursesView.querySelector(SELECTORS.PAGING_CONTROLS);
+        if (pagingControls) {
+            pagingControls.style.removeProperty('display');
         }
     }
 
     /**
-     * Repeatedly click the "load more courses" button, if present, until all
-     * pages of courses have been loaded into the DOM. Safe to call
-     * concurrently (e.g. once eagerly on init and once from a user's filter
-     * click before the eager load has finished) - callers share the same
-     * in-flight load rather than each clicking "load more" independently.
+     * Load every course into the DOM: prefer selecting "Show all" from
+     * block_myoverview's items-per-page dropdown (a single request), and
+     * fall back to clicking "Next" until it's exhausted when "Show all"
+     * isn't offered (Moodle hides it above 100 courses). Safe to call
+     * concurrently - callers share the same in-flight load.
      *
      * @return {Promise}
      */
     loadAllCourses() {
-        if (this.allLoaded || !this.courseContent) {
+        if (this.allLoaded) {
             return Promise.resolve();
         }
 
         if (!this.loadPromise) {
-            this.loadPromise = (async() => {
-                let loadMoreButton = this.root.querySelector(SELECTORS.LOAD_MORE_BUTTON);
-                while (loadMoreButton) {
-                    loadMoreButton.click();
-                    await waitForUpdate(this.courseContent, LOAD_MORE_TIMEOUT_MS);
-                    loadMoreButton = this.root.querySelector(SELECTORS.LOAD_MORE_BUTTON);
-                }
+            this.loadPromise = this.loadAllCoursesImpl().finally(() => {
                 this.allLoaded = true;
                 this.loadPromise = null;
-            })();
+            });
         }
 
         return this.loadPromise;
+    }
+
+    /**
+     * @return {Promise}
+     */
+    async loadAllCoursesImpl() {
+        const pagingBar = this.coursesView.querySelector(SELECTORS.PAGING_BAR);
+        if (!pagingBar) {
+            // Everything already fits on the one page that's rendered.
+            return;
+        }
+
+        const allOption = this.coursesView.querySelector(SELECTORS.LIMIT_ALL_OPTION);
+        if (allOption) {
+            allOption.click();
+            await waitForUpdate(this.coursesView, AJAX_SETTLE_TIMEOUT_MS);
+            return;
+        }
+
+        // No "Show all" option (more than 100 courses) - page through
+        // manually. Previously-loaded pages stay in the DOM (just hidden),
+        // so nothing here is wasted work.
+        let clicks = 0;
+        let next = pagingBar.querySelector(SELECTORS.NEXT_CONTROL);
+        while (next && !next.classList.contains('disabled') && clicks < MAX_NEXT_CLICKS) {
+            const link = next.querySelector(SELECTORS.PAGE_LINK) || next;
+            link.click();
+            await waitForUpdate(this.coursesView, AJAX_SETTLE_TIMEOUT_MS);
+            next = pagingBar.querySelector(SELECTORS.NEXT_CONTROL);
+            clicks++;
+        }
     }
 
     /**
@@ -145,21 +240,23 @@ class CourseFilter {
      * @return {String[]}
      */
     getCourseNames() {
-        const names = Array.from(this.root.querySelectorAll(SELECTORS.COURSE_NAME), el => el.textContent || '');
+        const names = Array.from(
+            this.coursesView.querySelectorAll(SELECTORS.COURSE_NAME),
+            el => el.textContent || ''
+        );
         if (names.length) {
             return names;
         }
 
         // No dedicated course name element found, fall back to the whole card.
-        return Array.from(this.root.querySelectorAll(SELECTORS.COURSE_ITEM), el => el.textContent || '');
+        return Array.from(this.coursesView.querySelectorAll(SELECTORS.COURSE_ITEM), el => el.textContent || '');
     }
 
     /**
      * Hide filter groups whose patterns match none of the currently loaded
-     * courses, and show groups that do have at least one match. Called once,
-     * after loadAllCourses() has resolved, so the decision reflects the
-     * complete course list rather than whatever page happened to be loaded
-     * first.
+     * courses, and show groups that do have at least one match. Called
+     * once, after loadAllCourses() has resolved, so the decision reflects
+     * the complete course list rather than whatever page loaded first.
      */
     updateGroupVisibility() {
         const courseNames = this.getCourseNames();
@@ -178,22 +275,26 @@ class CourseFilter {
 
     /**
      * Show or hide course cards depending on whether their name matches one
-     * of the active filter patterns.
+     * of the active filter patterns. While any filter is active, every
+     * loaded page is unhidden (block_myoverview otherwise only shows the
+     * page it currently considers "active") and its own pagination controls
+     * are hidden, since every course is already loaded and there's nothing
+     * left to page through.
      *
      * @param {String[]} patterns Active filter patterns (OR'd together).
      */
     applyFilters(patterns) {
-        const cards = this.root.querySelectorAll(SELECTORS.COURSE_ITEM);
+        this.coursesView.querySelectorAll(SELECTORS.PAGE).forEach(page => page.classList.remove('hidden'));
+        const pagingControls = this.coursesView.querySelector(SELECTORS.PAGING_CONTROLS);
+        if (pagingControls) {
+            pagingControls.style.setProperty('display', 'none');
+        }
+
+        const cards = this.coursesView.querySelectorAll(SELECTORS.COURSE_ITEM);
         let visible = 0;
 
         cards.forEach(card => {
             const column = card.closest(SELECTORS.COLUMN) || card;
-
-            if (patterns.length === 0) {
-                column.style.removeProperty('display');
-                visible++;
-                return;
-            }
 
             const nameEl = card.querySelector(SELECTORS.COURSE_NAME);
             const haystack = (nameEl ? nameEl.textContent : card.textContent) || '';
@@ -207,9 +308,8 @@ class CourseFilter {
             }
         });
 
-        this.toggleEmptyMessage(patterns.length > 0 && visible === 0);
-        this.countIndicator.textContent = patterns.length === 0 ?
-            '' : this.strings.showing.replace('{visible}', visible).replace('{total}', cards.length);
+        this.toggleEmptyMessage(visible === 0);
+        this.countIndicator.textContent = this.strings.showing.replace('{visible}', visible).replace('{total}', cards.length);
     }
 
     /**
@@ -218,7 +318,7 @@ class CourseFilter {
      * @param {Boolean} show Whether the message should be shown.
      */
     toggleEmptyMessage(show) {
-        let message = this.root.querySelector('.enhancedcourseoverview-empty');
+        let message = this.coursesView.querySelector('.enhancedcourseoverview-empty');
 
         if (!show) {
             if (message) {
@@ -227,11 +327,11 @@ class CourseFilter {
             return;
         }
 
-        if (!message && this.courseContent) {
+        if (!message) {
             message = document.createElement('div');
             message.className = 'alert alert-info enhancedcourseoverview-empty';
             message.textContent = this.strings.nomatches;
-            this.courseContent.appendChild(message);
+            this.coursesView.appendChild(message);
         }
     }
 
@@ -279,8 +379,7 @@ class CourseFilter {
 
         this.saveLayout();
 
-        const hasMoreToLoad = !this.allLoaded && this.root.querySelector(SELECTORS.LOAD_MORE_BUTTON);
-        if (hasMoreToLoad) {
+        if (!this.allLoaded) {
             this.countIndicator.textContent = this.strings.loading;
             await this.loadAllCourses();
         }
@@ -300,14 +399,19 @@ export const init = async(uniqid) => {
         return;
     }
 
-    const root = filterContainer.closest('.block') || document.body;
+    const block = filterContainer.closest('.block') || document.body;
+    const coursesView = block.querySelector(SELECTORS.COURSES_VIEW);
+    if (!coursesView) {
+        return;
+    }
+
     const [loading, nomatches, showing] = await Str.get_strings([
         {key: 'filter:loading', component: 'block_enhancedcourseoverview'},
         {key: 'filter:nomatches', component: 'block_enhancedcourseoverview'},
         {key: 'filter:showing', component: 'block_enhancedcourseoverview'},
     ]);
 
-    const filter = new CourseFilter(root, filterContainer, {loading, nomatches, showing});
+    const filter = new CourseFilter(coursesView, filterContainer, {loading, nomatches, showing});
 
     filterContainer.querySelectorAll(SELECTORS.FILTER_BUTTON).forEach(button => {
         button.addEventListener('click', event => {
@@ -328,12 +432,14 @@ export const init = async(uniqid) => {
         });
     });
 
-    // Load every course up front so which groups have matches can be
+    // block_myoverview renders only a placeholder skeleton server-side; wait
+    // for its own AJAX call to render real courses before touching anything.
+    await waitForInitialRender(coursesView);
+
+    // Then load every course up front so which groups have matches can be
     // determined accurately, instead of guessing from just the first page
-    // and revising that guess (visibly) as more courses stream in. This is
-    // a no-op if there's no "load more" button, i.e. everything is already
-    // on the page.
-    if (root.querySelector(SELECTORS.LOAD_MORE_BUTTON)) {
+    // and revising that guess (visibly) as more courses stream in.
+    if (coursesView.querySelector(SELECTORS.PAGING_BAR)) {
         filter.countIndicator.textContent = loading;
     }
     await filter.loadAllCourses();

@@ -6,7 +6,7 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 
 - Simple text-based filters configured through the plugin settings
 - Filter buttons organized in groups; click a group's header to toggle every filter in that group at once
-- On load, every course is fetched (via the dashboard's own "load more" button, if present) before deciding which filter groups have matches, so a group is never wrongly hidden just because its only matching course hadn't loaded yet
+- On load, every course is fetched (by driving Moodle's own dashboard pagination - see "How course loading works" below) before deciding which filter groups have matches, so a group is never wrongly hidden just because its only matching course hadn't loaded yet
 - Groups with no matching courses are hidden automatically, so the filter bar doesn't clutter the dashboard with irrelevant years
 - One or more filters can be configured to be active by default when a user opens their dashboard
 - JavaScript ships as a proper AMD module (`block_enhancedcourseoverview/filter`), scoped per block instance
@@ -68,7 +68,18 @@ This applies every time the block renders — it is not a per-user preference th
 2. Use the filter buttons to show only courses matching specific patterns
 3. Click a button to activate the filter, click again to deactivate; click a group's header to toggle the whole group
 4. Multiple filters can be active simultaneously (OR logic)
-5. When the block loads, it fetches every page of courses (if the dashboard paginates via a "load more" button) before deciding which filter groups have at least one match. Groups with no matches are hidden. This means there can be a brief "Loading all courses..." moment right after the dashboard loads on sites with many courses, since every course is being loaded up front rather than only when a filter is clicked.
+5. When the block loads, it fetches every course up front (see below) before deciding which filter groups have at least one match. Groups with no matches are hidden. This means there can be a brief "Loading all courses..." moment right after the dashboard loads on sites with many courses, since every course is being loaded up front rather than only when a filter is clicked.
+
+## How course loading works
+
+The standard Course Overview block (`block_myoverview`) doesn't have a "load more" button. It has a "Show 12 / 24 / 48 / 96 / All" dropdown and a Next/Previous pager, and it renders courses entirely client-side via AJAX (the server only ever sends a loading placeholder). To see every course - needed both for accurate group-hiding and for filtering to actually reach courses beyond the first page - this plugin's JavaScript:
+
+1. Waits for `block_myoverview`'s own JavaScript to finish its first AJAX render (nothing exists in the DOM to query before that).
+2. Prefers clicking "All" in the items-per-page dropdown, if it's offered - one request instead of many. Moodle only offers "All" for up to 100 total courses; above that it isn't shown at all.
+3. If "All" isn't available, clicks "Next" repeatedly until it's exhausted. `block_myoverview` keeps every page it fetches in the DOM (hiding inactive ones rather than discarding them), so this doesn't repeat work.
+4. While any filter is active, every loaded page is temporarily unhidden (so filtering can show matches from any page at once) and `block_myoverview`'s own pagination controls are hidden, since everything is already loaded and paging through it no longer applies. Clearing every filter restores `block_myoverview`'s pagination exactly as it was.
+
+This was reverse-engineered by reading Moodle's actual `blocks/myoverview` and `lib/templates/paged_content_*`/`lib/amd/src/paged_content_*` source (branch `MOODLE_405_STABLE`), not guessed - an earlier version of this plugin assumed a "load more" button and a single wrapping course-list container that don't actually exist in Moodle, which meant that version's course-loading and empty-state logic were silently no-ops. It's still only been verified by reading source, not against a running Moodle site — test in staging.
 
 ## Requirements
 
