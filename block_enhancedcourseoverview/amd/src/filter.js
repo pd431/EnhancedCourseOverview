@@ -85,10 +85,19 @@ const waitForUpdate = (target, timeout) => new Promise(resolve => {
 });
 
 /**
- * Poll for block_myoverview's own AJAX-rendered course markup (course
- * cards/list items, a paging bar, or - if the user has no courses - neither
- * ever appears) before this module touches anything, since none of it
- * exists in the server-rendered placeholder skeleton.
+ * Poll for block_myoverview's first real page of content (a
+ * [data-region="paged-content-page"], containing either course cards or a
+ * "no courses" message) before this module touches anything.
+ *
+ * This deliberately does NOT treat the paging bar itself as "ready": Moodle
+ * builds and inserts the paging bar synchronously, then immediately clicks
+ * page 1 on its own to kick off the *first* course fetch - so the paging
+ * bar exists well before any page has actually rendered. Moodle's own
+ * paging bar ignores further clicks while a fetch is already in flight
+ * (ignoreControlWhileLoading), so acting on the paging bar's mere presence
+ * would race that first fetch: our own "load everything" click gets
+ * silently swallowed, and we'd wrongly settle for whatever that first
+ * fetch alone returned (e.g. just the first page of 12).
  *
  * @param {Element} coursesView The block's [data-region="courses-view"] element.
  * @return {Promise}
@@ -96,14 +105,13 @@ const waitForUpdate = (target, timeout) => new Promise(resolve => {
 const waitForInitialRender = coursesView => new Promise(resolve => {
     const start = Date.now();
     const check = () => {
-        if (coursesView.querySelector(`${SELECTORS.COURSE_ITEM}, ${SELECTORS.PAGING_BAR}`)) {
+        if (coursesView.querySelector(SELECTORS.PAGE)) {
             resolve();
             return;
         }
         if (Date.now() - start > INITIAL_RENDER_TIMEOUT_MS) {
-            // Gives up rather than hangs - e.g. the user has no courses at
-            // all, so neither a card/list item nor a paging bar will ever
-            // appear.
+            // Gives up rather than hangs, in case this never appears for
+            // some unanticipated reason.
             resolve();
             return;
         }
