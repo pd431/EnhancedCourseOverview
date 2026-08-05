@@ -67,7 +67,7 @@ The `*` is a digit wildcard — see below.
 
 #### Digit wildcard
 
-Use `*` in a pattern to match a run of one or more digits. This is needed for course codes that combine multiple terms into one digit group, which a plain pattern can't match at all: a code like `CHE3005_A_23_202425` (spanning Term 2 and Term 3) contains neither `_2_202425` nor `_3_202425` as a substring. Instead, `_*2*_202425` matches Term 2 and `_*3*_202425` matches Term 3 — both match `_23_202425` wherever it appears, and each still matches a plain single-term code like `_2_202425` too. `*` only ever matches digits, never letters or other text, so it can't accidentally spill past the surrounding underscores. This is what the default filter definitions use.
+Use `*` in a pattern to match a run of zero or more digits. This is needed for course codes that combine multiple terms into one digit group, which a plain pattern can't match at all: a code like `CHE3005_A_23_202425` (spanning Term 2 and Term 3) contains neither `_2_202425` nor `_3_202425` as a substring. Instead, `_*2*_202425` matches Term 2 and `_*3*_202425` matches Term 3 — both match `_23_202425` wherever it appears, and each still matches a plain single-term code like `_2_202425` too (matching zero extra digits either side of the required "2"). `*` only ever matches digits, never letters or other text, so it can't accidentally spill past the surrounding underscores. This is what the default filter definitions use.
 
 #### Regex patterns
 
