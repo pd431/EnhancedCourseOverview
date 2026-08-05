@@ -60,6 +60,75 @@ const INITIAL_RENDER_TIMEOUT_MS = 15000;
 const INITIAL_RENDER_POLL_MS = 150;
 const MAX_NEXT_CLICKS = 500;
 
+// Cache of pattern string -> compiled RegExp (or null for a plain-substring
+// pattern), shared across every filter instance on the page since patterns
+// are static per page load.
+const patternCache = new Map();
+
+/**
+ * Escape every regex-special character in a string so it matches itself
+ * literally when used inside a RegExp.
+ *
+ * @param {String} text
+ * @return {String}
+ */
+const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Compile a pattern into a RegExp if it uses either of two opt-in syntaxes,
+ * or return null to mean "match as a plain substring" (unchanged, original
+ * behaviour). Every existing plain-text pattern (e.g. "_A_2_202425") uses
+ * neither syntax, so it keeps matching exactly as before.
+ *
+ * 1. Digit wildcard: a "*" in the pattern matches a run of zero or more
+ *    digits (not arbitrary text). Handles course codes that combine
+ *    multiple terms into one digit group, which a plain substring pattern
+ *    can't express: a code like "_A_23_202425" (spanning Term 2 and
+ *    Term 3) doesn't contain "_A_2_202425" or "_A_3_202425" as a
+ *    substring at all. A pattern of "_A_*2*_202425" matches it (and still
+ *    matches a plain single-term code like "_A_2_202425" too).
+ *
+ * 2. Full regex: a pattern wrapped in slashes, e.g. "/pattern/" or with
+ *    trailing flags "/pattern/i", is compiled as a regular expression
+ *    as-is, for anything the digit wildcard can't express.
+ *
+ * @param {String} pattern
+ * @return {?RegExp} The compiled regex, or null if this is a plain-substring pattern.
+ */
+const compilePattern = pattern => {
+    const regexLiteral = /^\/(.*)\/([a-z]*)$/.exec(pattern);
+    if (regexLiteral) {
+        try {
+            return new RegExp(regexLiteral[1], regexLiteral[2]);
+        } catch (e) {
+            // Invalid regex - fall back to treating it as a literal substring.
+            return null;
+        }
+    }
+
+    if (pattern.indexOf('*') !== -1) {
+        return new RegExp(pattern.split('*').map(escapeRegExp).join('[0-9]*'));
+    }
+
+    return null;
+};
+
+/**
+ * Test whether a course's display text matches a filter pattern, as either
+ * a compiled regex (see compilePattern()) or a plain substring.
+ *
+ * @param {String} haystack The course's display text.
+ * @param {String} pattern The filter pattern.
+ * @return {Boolean}
+ */
+const patternMatches = (haystack, pattern) => {
+    if (!patternCache.has(pattern)) {
+        patternCache.set(pattern, compilePattern(pattern));
+    }
+    const regex = patternCache.get(pattern);
+    return regex ? regex.test(haystack) : haystack.indexOf(pattern) !== -1;
+};
+
 /**
  * Wait until an element's subtree stops mutating (e.g. after Moodle's own
  * pagination fetches and renders a page via AJAX), or until a timeout
@@ -275,7 +344,7 @@ class CourseFilter {
                 button => button.getAttribute('data-pattern')
             );
             const hasMatch = patterns.some(
-                pattern => courseNames.some(name => name.indexOf(pattern) !== -1)
+                pattern => courseNames.some(name => patternMatches(name, pattern))
             );
             group.classList.toggle('enhancedcourseoverview-group-hidden', !hasMatch);
         });
@@ -306,7 +375,7 @@ class CourseFilter {
 
             const nameEl = card.querySelector(SELECTORS.COURSE_NAME);
             const haystack = (nameEl ? nameEl.textContent : card.textContent) || '';
-            const matches = patterns.some(pattern => haystack.indexOf(pattern) !== -1);
+            const matches = patterns.some(pattern => patternMatches(haystack, pattern));
 
             if (matches) {
                 column.style.removeProperty('display');
