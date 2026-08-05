@@ -4,7 +4,7 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 
 ## Features
 
-- Simple text-based filters configured through the plugin settings
+- Simple text-based filters configured through the plugin settings, matched against course titles/codes as substrings, a digit wildcard, or full regex - not tied to any particular course code convention, since a pattern only needs to match the part of the code it cares about (typically just term+year), not the whole thing
 - Filter buttons organized in groups; click a group's header to toggle every filter in that group at once
 - On load, every course is fetched (by driving Moodle's own dashboard pagination - see "How course loading works" below) before deciding which filter groups have matches, so a group is never wrongly hidden just because its only matching course hadn't loaded yet
 - Groups with no matching courses are hidden automatically, so the filter bar doesn't clutter the dashboard with irrelevant years
@@ -40,24 +40,44 @@ Each line without a pipe (|) character starts a new group. Lines with pipes defi
 Example:
 ```
 2023-24
-Term 1|_A_1_202324
-Term 2|_A_2_202324
-Term 3|_A_3_202324
+Term 1|_*1*_202324
+Term 2|_*2*_202324
+Term 3|_*3*_202324
 
 2024-25
-Term 1|_A_1_202425
-Term 2|_A_2_202425
-Term 3|_A_3_202425
+Term 1|_*1*_202425
+Term 2|_*2*_202425
+Term 3|_*3*_202425
 ```
 
 To add a new year, add a new block of lines following the same pattern (there's no auto-generation — this is entirely manual by design, so it's easy to read and predict).
+
+#### Pattern matching
+
+A pattern matches if it appears **anywhere** in the course title or code — it doesn't need to describe the whole code, and usually shouldn't. Match only the part that identifies the term; leave your department/module/campus code out of the pattern entirely, whatever shape that happens to take. Two real institutions' course codes can look completely different (`MTH2030_A_1_202324` vs. `BEF3104DA_1F6O25_1_202627`) and still both work with the exact same term pattern, because neither pattern ever tries to describe the department/module/campus part — only the term+year suffix, which is what actually determines the filter:
+
+```
+Term 1|_*1*_202324
+```
+
+matches both `MTH2030_A_1_202324` and (for the 2024-25 pattern) `BEF3104DA_1F6O25_1_202425`, regardless of what precedes the term.
+
+The `*` is a digit wildcard — see below.
+
+#### Digit wildcard
+
+Use `*` in a pattern to match a run of one or more digits. This is needed for course codes that combine multiple terms into one digit group, which a plain pattern can't match at all: a code like `CHE3005_A_23_202425` (spanning Term 2 and Term 3) contains neither `_2_202425` nor `_3_202425` as a substring. Instead, `_*2*_202425` matches Term 2 and `_*3*_202425` matches Term 3 — both match `_23_202425` wherever it appears, and each still matches a plain single-term code like `_2_202425` too. `*` only ever matches digits, never letters or other text, so it can't accidentally spill past the surrounding underscores. This is what the default filter definitions use.
+
+#### Regex patterns
+
+For anything the digit wildcard can't express, wrap a pattern in forward slashes to match it as a full regular expression instead, optionally followed by flags, e.g. `/pattern/i`. For example `/_[AB]_[0-9]*2[0-9]*_202425/` matches Term 2 whether the code has `_A_` or `_B_` immediately before the term.
 
 ### Default active filters
 
 A comma or newline separated list of exact **patterns** (not titles) that should already be selected when a user opens their dashboard, e.g. the current term:
 
 ```
-_A_2_202526
+_*2*_202526
 ```
 
 This applies every time the block renders — it is not a per-user preference the user can change permanently, just an initial state they can still toggle off.

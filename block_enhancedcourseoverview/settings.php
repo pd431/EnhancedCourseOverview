@@ -33,13 +33,13 @@ if ($ADMIN->fulltree) {
     ));
     
     // Filter definitions.
-    $defaultfilters = "2023-24\nTerm 1|_A_1_202324\nTerm 2|_A_2_202324\nTerm 3|_A_3_202324\n\n2024-25\nTerm 1|_A_1_202425\nTerm 2|_A_2_202425\nTerm 3|_A_3_202425\n\n2025-26\nTerm 1|_A_1_202526\nTerm 2|_A_2_202526\nTerm 3|_A_3_202526\n\n2026-27\nTerm 1|_A_1_202627\nTerm 2|_A_2_202627\nTerm 3|_A_3_202627";
+    $defaultfilters = "2023-24\nTerm 1|_*1*_202324\nTerm 2|_*2*_202324\nTerm 3|_*3*_202324\n\n2024-25\nTerm 1|_*1*_202425\nTerm 2|_*2*_202425\nTerm 3|_*3*_202425\n\n2025-26\nTerm 1|_*1*_202526\nTerm 2|_*2*_202526\nTerm 3|_*3*_202526\n\n2026-27\nTerm 1|_*1*_202627\nTerm 2|_*2*_202627\nTerm 3|_*3*_202627";
 
     $description = get_string('settings:filterdefinitions_desc', 'block_enhancedcourseoverview') .
                   '<br><br><strong>Format:</strong><pre>' .
                   htmlspecialchars($defaultfilters) . '</pre>' .
-                  '<br><strong>Note:</strong> Make sure each group name (like "2023-24") appears on its own line, followed by filter definitions in the format "Term X|_A_X_YYYY". There should be an empty line between groups.' .
-                  '<br><strong>Pattern Explanation:</strong> The pattern should match your institution\'s course code format, where "_A_1_202324" matches courses from Term 1 in 2023-24, etc.';
+                  '<br><strong>Note:</strong> Make sure each group name (like "2023-24") appears on its own line, followed by filter definitions in the format "Term X|Pattern". There should be an empty line between groups.' .
+                  '<br><strong>Pattern Explanation:</strong> A pattern matches if it appears anywhere in the course title or code, so it only needs to describe the part that identifies the term - it does not need to (and usually should not) also describe your department/module/campus code, whatever that looks like. The default "_*1*_202324" matches Term 1 courses in 2023-24 regardless of what comes before it, e.g. both "MTH2030_A_1_202324" and "BEF3104DA_1F6O25_1_202627"-style codes for their respective years. See "Digit wildcard" below for what "*" does.';
 
     $settings->add(new admin_setting_configtextarea(
         'block_enhancedcourseoverview/filterdefinitions',
