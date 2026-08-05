@@ -1,4 +1,10 @@
-/* Filter buttons styling */
+/*
+ * Layout only. Button appearance (borders, radius, active/hover colours,
+ * sizing) intentionally comes entirely from Bootstrap/the theme: buttons
+ * use standard .btn-outline-primary / .btn-outline-secondary and
+ * .btn-group-sm classes, so toggling .active is enough to get each theme's
+ * real colours and sizing for free, with nothing to keep in sync here.
+ */
 .enhanced-filters {
     margin-bottom: 1rem;
     display: flex;
@@ -7,98 +13,19 @@
     gap: 0.5rem;
 }
 
-.enhanced-filters .btn-group {
-    margin-bottom: 0;
-    border: 1px solid var(--border-color, #dee2e6);
-    border-radius: var(--border-radius, 0.25rem);
-    overflow: hidden;
-}
-
 .enhanced-filters .btn-group.enhancedcourseoverview-group-hidden {
     display: none;
 }
 
 .filter-group-toggle {
-    background-color: var(--light, #f8f9fa);
-    font-weight: 600;
-    color: var(--dark, #495057);
-    border-right: 1px solid var(--border-color, #dee2e6) !important;
     cursor: pointer;
 }
 
-.filter-group-toggle:hover {
-    background-color: var(--gray-200, #e9ecef);
-}
-
-.filter-group-toggle.active {
-    background-color: var(--primary, #1a73e8);
-    border-color: var(--primary, #1a73e8);
-    color: #fff;
-}
-
-.filter-group-toggle.filter-group-toggle-partial {
-    background-image: linear-gradient(
-        to right,
-        var(--primary, #1a73e8) 50%,
-        var(--light, #f8f9fa) 50%
-    );
-    background-size: 200% 100%;
-    background-position: right bottom;
-    color: var(--dark, #495057);
-}
-
-.filter-term-btn {
-    border: none;
-    border-right: 1px solid var(--border-color, #dee2e6);
-}
-
-.filter-term-btn:last-child {
-    border-right: none;
-}
-
-.filter-term-btn.active {
-    background-color: var(--primary, #1a73e8);
-    border-color: var(--primary, #1a73e8);
-    color: #fff;
-}
-
-/* Count of visible courses */
-.course-count-indicator {
-    margin-top: 0.5rem;
-    margin-bottom: 0.5rem;
-    font-size: 0.8125rem;
-    color: var(--gray-600, #6c757d);
-}
-
-/* Condensed, Boost-style buttons */
-.enhanced-filters .btn {
-    padding: 0.25rem 0.65rem;
-    font-size: 0.8125rem;
-    line-height: 1.4;
-    border-radius: 0;
-    box-shadow: none;
-    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
-}
-
-.enhanced-filters .filter-term-btn:hover:not(.active):not(:disabled) {
-    background-color: var(--gray-100, #f1f3f5);
-}
-
-/* For very narrow screens, make filter buttons wrap nicely */
+/* For very narrow screens, let filter groups wrap onto their own line. */
 @media (max-width: 576px) {
     .enhanced-filters .btn-group {
         display: flex;
         flex-wrap: wrap;
         width: 100%;
-    }
-
-    .enhanced-filters .btn-group .btn {
-        margin-bottom: 0;
-        border-right: none;
-        border-bottom: 1px solid var(--border-color, #dee2e6);
-    }
-
-    .enhanced-filters .btn-group .btn:last-child {
-        border-bottom: none;
     }
 }

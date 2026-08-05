@@ -10,6 +10,7 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 - Groups with no matching courses are hidden automatically, so the filter bar doesn't clutter the dashboard with irrelevant years
 - One or more filters can be configured to be active by default when a user opens their dashboard
 - JavaScript ships as a proper AMD module (`block_enhancedcourseoverview/filter`), scoped per block instance
+- Buttons use plain Bootstrap classes (`.btn-outline-primary`/`.btn-outline-secondary`, `.btn-group-sm`) with no custom colours, border-radius, or shadow - they pick up whatever the active theme actually set, including a customised Boost/Boost Union theme
 - Maintains all original Course Overview block functionality
 
 ## Installation

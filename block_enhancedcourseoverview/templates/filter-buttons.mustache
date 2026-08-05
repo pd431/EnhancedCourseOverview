@@ -46,7 +46,7 @@
     <div class="btn-group btn-group-sm mb-1">
         <button type="button" class="btn btn-outline-secondary filter-group-toggle" data-group="{{name}}" aria-pressed="false">{{name}}</button>
         {{#filters}}
-        <button type="button" class="btn btn-outline-secondary filter-term-btn{{#isdefault}} active{{/isdefault}}" data-group="{{name}}" data-pattern="{{pattern}}" aria-pressed="{{#isdefault}}true{{/isdefault}}{{^isdefault}}false{{/isdefault}}">{{title}}</button>
+        <button type="button" class="btn btn-outline-primary filter-term-btn{{#isdefault}} active{{/isdefault}}" data-group="{{name}}" data-pattern="{{pattern}}" aria-pressed="{{#isdefault}}true{{/isdefault}}{{^isdefault}}false{{/isdefault}}">{{title}}</button>
         {{/filters}}
     </div>
     {{/filtergroups}}

@@ -208,7 +208,7 @@ class CourseFilter {
         this.originalActivePage = null;
 
         this.countIndicator = document.createElement('div');
-        this.countIndicator.className = 'course-count-indicator';
+        this.countIndicator.className = 'course-count-indicator text-muted small';
         filterContainer.insertAdjacentElement('afterend', this.countIndicator);
     }
 
@@ -414,7 +414,8 @@ class CourseFilter {
 
     /**
      * Update each button's aria-pressed attribute, and each group header's
-     * active/indeterminate styling, to reflect the current active buttons.
+     * active styling (Bootstrap's own .btn-outline-*.active look), to
+     * reflect the current active buttons.
      */
     syncButtonStates() {
         this.filterContainer.querySelectorAll(SELECTORS.FILTER_BUTTON).forEach(button => {
@@ -429,7 +430,6 @@ class CourseFilter {
             }
             const activeCount = group.querySelectorAll(`${SELECTORS.FILTER_BUTTON}.active`).length;
             toggle.classList.toggle('active', activeCount === buttons.length);
-            toggle.classList.toggle('filter-group-toggle-partial', activeCount > 0 && activeCount < buttons.length);
             toggle.setAttribute('aria-pressed', activeCount === buttons.length ? 'true' : 'false');
         });
     }
