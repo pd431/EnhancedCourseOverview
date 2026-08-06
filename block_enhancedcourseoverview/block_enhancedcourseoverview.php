@@ -107,7 +107,13 @@ class block_enhancedcourseoverview extends block_myoverview {
      * Format:
      *   Group name (line without a pipe character)
      *   Filter title|pattern to match (repeated for each filter in the group)
+     *   Filter title|pattern to match|default (trailing "|default" marks it active by default)
      *   (blank line separates groups)
+     *
+     * The trailing "|default" is stripped before splitting the rest of the
+     * line on its first pipe, so a pattern is free to contain its own pipe
+     * characters (e.g. regex alternation like "/_(A|B)_2_202425/") without
+     * being mistaken for the default marker or corrupted by it.
      *
      * @param string $filterdefs The raw filter definitions from the settings.
      * @return array The parsed filter groups, each with a 'name' and a list of 'filters'.
@@ -145,6 +151,12 @@ class block_enhancedcourseoverview extends block_myoverview {
                 continue;
             }
 
+            $isdefault = false;
+            if (preg_match('/\|\s*default\s*$/i', $line)) {
+                $isdefault = true;
+                $line = preg_replace('/\|\s*default\s*$/i', '', $line);
+            }
+
             [$title, $pattern] = array_pad(explode('|', $line, 2), 2, '');
             $title = trim($title);
             $pattern = trim($pattern);
@@ -156,6 +168,7 @@ class block_enhancedcourseoverview extends block_myoverview {
             $groups[$currentindex]['filters'][] = [
                 'title' => $title,
                 'pattern' => $pattern,
+                'isdefault' => $isdefault,
             ];
         }
 
@@ -166,9 +179,10 @@ class block_enhancedcourseoverview extends block_myoverview {
     }
 
     /**
-     * Mark which filters should be active by default, based on the
-     * defaultpatterns setting (a comma/newline separated list of exact
-     * pattern strings).
+     * Mark which filters should be active by default: either flagged inline
+     * with a trailing "|default" in the filter definitions, or listed in
+     * the defaultpatterns setting (a comma/newline separated list of exact
+     * pattern strings) - either is enough to mark a filter as default.
      *
      * @param array $filtergroups The filter groups produced by parse_filter_definitions().
      * @return array The same groups, with each filter tagged with 'isdefault'.
@@ -189,7 +203,7 @@ class block_enhancedcourseoverview extends block_myoverview {
 
         foreach ($filtergroups as &$group) {
             foreach ($group['filters'] as &$filter) {
-                $filter['isdefault'] = isset($defaults[$filter['pattern']]);
+                $filter['isdefault'] = !empty($filter['isdefault']) || isset($defaults[$filter['pattern']]);
             }
             unset($filter);
         }

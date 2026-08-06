@@ -75,13 +75,26 @@ For anything the digit wildcard can't express, wrap a pattern in forward slashes
 
 ### Default active filters
 
-A comma or newline separated list of exact **patterns** (not titles) that should already be selected when a user opens their dashboard, e.g. the current term:
+Two ways to mark a filter as active by default (already selected when a user opens their dashboard) - use whichever's more convenient, or mix both:
+
+**Inline**, directly on the filter definition line: add `|default` to the end.
+
+```
+2025-26
+Term 1|_*1*_202526
+Term 2|_*2*_202526|default
+Term 3|_*3*_202526|default
+```
+
+A pipe inside the pattern itself (e.g. regex alternation like `/_(A|B)_2_202425/`) is left alone - only a trailing `|default` is treated specially.
+
+**Separately**, in the "Default active filters" setting: a comma or newline separated list of exact **patterns** (not titles), e.g.:
 
 ```
 _*2*_202526
 ```
 
-This applies every time the block renders — it is not a per-user preference the user can change permanently, just an initial state they can still toggle off.
+Either way, this applies every time the block renders — it is not a per-user preference the user can change permanently, just an initial state they can still toggle off.
 
 ## Usage
 
