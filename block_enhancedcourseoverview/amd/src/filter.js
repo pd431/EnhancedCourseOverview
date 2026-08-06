@@ -381,6 +381,8 @@ class CourseFilter {
             }])[0];
             return response.courses || [];
         } catch (e) {
+            // eslint-disable-next-line no-console
+            console.error('block_enhancedcourseoverview: failed to fetch course/role data', e);
             return null;
         }
     }

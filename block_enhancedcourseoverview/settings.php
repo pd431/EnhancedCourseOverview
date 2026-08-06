@@ -48,15 +48,4 @@ if ($ADMIN->fulltree) {
         $defaultfilters,
         PARAM_RAW
     ));
-
-    // Default active filters: patterns (matching the pattern column, not the
-    // title) that should already be selected when a user opens their
-    // dashboard, e.g. the current term.
-    $settings->add(new admin_setting_configtextarea(
-        'block_enhancedcourseoverview/defaultpatterns',
-        get_string('settings:defaultpatterns', 'block_enhancedcourseoverview'),
-        get_string('settings:defaultpatterns_desc', 'block_enhancedcourseoverview'),
-        '',
-        PARAM_RAW
-    ));
 }

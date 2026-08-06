@@ -73,8 +73,6 @@ class block_enhancedcourseoverview extends block_myoverview {
             return $this->content;
         }
 
-        $filtergroups = $this->mark_default_filters($filtergroups);
-
         $uniqid = 'ceo-' . $this->instance->id;
 
         $renderer = $this->page->get_renderer('block_enhancedcourseoverview');
@@ -176,39 +174,5 @@ class block_enhancedcourseoverview extends block_myoverview {
         return array_values(array_filter($groups, function($group) {
             return !empty($group['filters']);
         }));
-    }
-
-    /**
-     * Mark which filters should be active by default: either flagged inline
-     * with a trailing "|default" in the filter definitions, or listed in
-     * the defaultpatterns setting (a comma/newline separated list of exact
-     * pattern strings) - either is enough to mark a filter as default.
-     *
-     * @param array $filtergroups The filter groups produced by parse_filter_definitions().
-     * @return array The same groups, with each filter tagged with 'isdefault'.
-     */
-    protected function mark_default_filters(array $filtergroups) {
-        $raw = get_config('block_enhancedcourseoverview', 'defaultpatterns');
-        $defaults = [];
-
-        if (!empty($raw)) {
-            $raw = str_replace(["\r\n", "\r", ','], "\n", $raw);
-            foreach (explode("\n", $raw) as $pattern) {
-                $pattern = trim($pattern);
-                if ($pattern !== '') {
-                    $defaults[$pattern] = true;
-                }
-            }
-        }
-
-        foreach ($filtergroups as &$group) {
-            foreach ($group['filters'] as &$filter) {
-                $filter['isdefault'] = !empty($filter['isdefault']) || isset($defaults[$filter['pattern']]);
-            }
-            unset($filter);
-        }
-        unset($group);
-
-        return $filtergroups;
     }
 }
