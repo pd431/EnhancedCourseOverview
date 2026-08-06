@@ -17,6 +17,16 @@
     display: none;
 }
 
+/*
+ * Hides the whole filter bar until JS has decided what to actually show it
+ * (either instantly, from a per-user cached decision, or once the
+ * background course/role fetch resolves) - visibility (not display) keeps
+ * its layout space reserved, so nothing below it jumps once it appears.
+ */
+.enhanced-filters.enhancedcourseoverview-pending {
+    visibility: hidden;
+}
+
 .filter-group-toggle {
     cursor: pointer;
 }

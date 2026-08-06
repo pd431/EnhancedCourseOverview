@@ -54,6 +54,8 @@ class block_enhancedcourseoverview extends block_myoverview {
      * @return stdClass|null
      */
     public function get_content() {
+        global $USER;
+
         if (isset($this->content)) {
             return $this->content;
         }
@@ -94,7 +96,7 @@ class block_enhancedcourseoverview extends block_myoverview {
             ['filter:loading', 'filter:nomatches', 'filter:showing', 'filter:rolesgroup'],
             'block_enhancedcourseoverview'
         );
-        $this->page->requires->js_call_amd('block_enhancedcourseoverview/filter', 'init', [$uniqid]);
+        $this->page->requires->js_call_amd('block_enhancedcourseoverview/filter', 'init', [$uniqid, (int) $USER->id]);
 
         return $this->content;
     }

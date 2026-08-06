@@ -74,6 +74,13 @@ const VIEW_CHANGE_DEBOUNCE_MS = 300;
 const ROLE_CATEGORY = 'role';
 const DEFAULT_CATEGORY = 'term';
 
+// Bump when the cached shape below changes, so old entries are ignored
+// instead of misread.
+const CACHE_VERSION = 1;
+const CACHE_PREFIX = 'block_enhancedcourseoverview:filters:';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const PENDING_CLASS = 'enhancedcourseoverview-pending';
+
 // Cache of pattern string -> compiled RegExp (or null for a plain-substring
 // pattern), shared across every filter instance on the page since patterns
 // are static per page load.
@@ -212,8 +219,10 @@ class CourseFilter {
      * @param {Element} coursesView The block_myoverview [data-region="courses-view"] element.
      * @param {Element} filterContainer The container holding the filter buttons.
      * @param {Object} strings Localised strings, keyed by 'loading', 'nomatches', 'showing' and 'rolesgroup'.
+     * @param {Number} userid The current user's id, used to scope the browser-side cache so it never
+     *                        crosses between different users of the same browser.
      */
-    constructor(coursesView, filterContainer, strings) {
+    constructor(coursesView, filterContainer, strings, userid) {
         this.coursesView = coursesView;
         this.filterContainer = filterContainer;
         this.strings = strings;
@@ -222,6 +231,11 @@ class CourseFilter {
         this.filtering = false;
         this.originalActivePage = null;
         this.syncing = false;
+        // Scoped by user id (so switching to a different user on the same
+        // browser never sees another user's cached filter state) and by
+        // this block instance's own uniqid (so multiple instances, or
+        // multiple sites sharing an origin, don't collide).
+        this.cacheKey = `${CACHE_PREFIX}${userid}:${filterContainer.id}`;
         // Map of course id (string) -> Set of role shortnames, built from
         // the last background fetch. Used to filter rendered cards by role
         // via their data-course-id, without a further request per card.
@@ -350,6 +364,37 @@ class CourseFilter {
     }
 
     /**
+     * A string identifying the current view (grouping/sort/custom field), so
+     * a cached decision is only ever reused for the view it was actually
+     * computed for.
+     *
+     * @return {String}
+     */
+    getViewKey() {
+        const params = this.getViewParams();
+        return [params.classification, params.sort, params.customfieldname, params.customfieldvalue].join('|');
+    }
+
+    /**
+     * A stable identifier for a filter group, used as a cache key: the
+     * dynamically-built Roles group (there's ever at most one) uses its
+     * category; PHP-rendered term/year groups use their category plus their
+     * configured group name (read off their toggle button's data-group,
+     * since that's set on the button rather than the wrapping .btn-group).
+     *
+     * @param {Element} group
+     * @return {String}
+     */
+    getGroupKey(group) {
+        const category = this.getGroupCategory(group);
+        if (category === ROLE_CATEGORY) {
+            return ROLE_CATEGORY;
+        }
+        const toggle = group.querySelector(SELECTORS.GROUP_TOGGLE);
+        return `${category}:${toggle ? toggle.getAttribute('data-group') : ''}`;
+    }
+
+    /**
      * Fetch the current user's courses matching the current view (grouping/
      * sort/custom field), with their role(s) in each, via this plugin's own
      * webservice - independent of, and without forcing, anything being
@@ -416,9 +461,6 @@ class CourseFilter {
                 button => button.getAttribute('data-pattern')
             )) :
             new Set();
-        if (existing) {
-            existing.remove();
-        }
 
         const roleNamesByShortname = new Map();
         courseData.forEach(course => {
@@ -429,7 +471,28 @@ class CourseFilter {
             });
         });
 
-        if (roleNamesByShortname.size <= 1) {
+        const roles = Array.from(roleNamesByShortname, ([shortname, name]) => ({shortname, name}));
+        this.renderRolesGroup(roles, previouslyActive);
+    }
+
+    /**
+     * (Re)build the "Roles" filter group from a plain list of distinct
+     * roles - shared by rebuildRolesGroup() (from a fresh background fetch)
+     * and applyCachedState() (from a cached list, before any fetch has
+     * happened this page load). Only created at all when there's more than
+     * one distinct role - with just one, a role filter has nothing
+     * meaningful to narrow down.
+     *
+     * @param {Array} roles [{shortname, name}, ...]
+     * @param {Set} activeShortnames Shortnames that should render as already active.
+     */
+    renderRolesGroup(roles, activeShortnames) {
+        const existing = this.filterContainer.querySelector(`${SELECTORS.GROUP}[data-category="${ROLE_CATEGORY}"]`);
+        if (existing) {
+            existing.remove();
+        }
+
+        if (!roles || roles.length <= 1) {
             return;
         }
 
@@ -444,19 +507,137 @@ class CourseFilter {
         header.textContent = this.strings.rolesgroup;
         group.appendChild(header);
 
-        roleNamesByShortname.forEach((name, shortname) => {
-            const isactive = previouslyActive.has(shortname);
+        roles.forEach(role => {
+            const isactive = activeShortnames.has(role.shortname);
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'btn btn-outline-primary filter-term-btn' + (isactive ? ' active' : '');
-            button.setAttribute('data-pattern', shortname);
+            button.setAttribute('data-pattern', role.shortname);
             button.setAttribute('aria-pressed', isactive ? 'true' : 'false');
-            button.textContent = name;
+            button.textContent = role.name;
             group.appendChild(button);
         });
 
         this.filterContainer.appendChild(group);
         this.wireGroup(group);
+    }
+
+    /**
+     * Reveal the filter bar (see PENDING_CLASS on the template - it starts
+     * hidden so it never flashes fully-visible-then-narrowed before this
+     * module has decided what should actually show).
+     */
+    reveal() {
+        this.filterContainer.classList.remove(PENDING_CLASS);
+    }
+
+    /**
+     * Read this block instance's cached filter state for the current view
+     * (see getViewKey()), if any exists, isn't expired, and matches the
+     * cache format this version of the code writes. Anything else - no
+     * entry, wrong version, expired, different view, malformed - is treated
+     * as a cache miss rather than risking acting on bad data.
+     *
+     * @return {?Object}
+     */
+    readCache() {
+        try {
+            const raw = window.localStorage.getItem(this.cacheKey);
+            if (!raw) {
+                return null;
+            }
+            const data = JSON.parse(raw);
+            if (
+                !data ||
+                data.version !== CACHE_VERSION ||
+                typeof data.updatedAt !== 'number' ||
+                (Date.now() - data.updatedAt) > CACHE_TTL_MS ||
+                data.viewKey !== this.getViewKey() ||
+                !Array.isArray(data.hiddenGroups) ||
+                !data.activePatterns || typeof data.activePatterns !== 'object' ||
+                !Array.isArray(data.roles)
+            ) {
+                return null;
+            }
+            return data;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * Persist the current group-visibility, Roles group, and active-filter
+     * state to the browser-side cache, read straight off the live DOM
+     * (already the source of truth by the time this is called) rather than
+     * needing a fresh copy of the last fetch's data threaded through.
+     * Purely an optimisation for next time this view loads - failures here
+     * (storage disabled, full, private browsing) are safe to ignore.
+     */
+    writeCache() {
+        try {
+            const hiddenGroups = [];
+            this.filterContainer.querySelectorAll(SELECTORS.GROUP).forEach(group => {
+                if (group.classList.contains('enhancedcourseoverview-group-hidden')) {
+                    hiddenGroups.push(this.getGroupKey(group));
+                }
+            });
+
+            const activePatterns = {};
+            this.filterContainer.querySelectorAll(`${SELECTORS.FILTER_BUTTON}.active`).forEach(button => {
+                const group = button.closest(SELECTORS.GROUP);
+                const category = group ? this.getGroupCategory(group) : DEFAULT_CATEGORY;
+                if (!activePatterns[category]) {
+                    activePatterns[category] = [];
+                }
+                activePatterns[category].push(button.getAttribute('data-pattern'));
+            });
+
+            const roleGroup = this.filterContainer.querySelector(`${SELECTORS.GROUP}[data-category="${ROLE_CATEGORY}"]`);
+            const roles = roleGroup ? Array.from(
+                roleGroup.querySelectorAll(SELECTORS.FILTER_BUTTON),
+                button => ({shortname: button.getAttribute('data-pattern'), name: button.textContent})
+            ) : [];
+
+            window.localStorage.setItem(this.cacheKey, JSON.stringify({
+                version: CACHE_VERSION,
+                viewKey: this.getViewKey(),
+                hiddenGroups,
+                activePatterns,
+                roles,
+                updatedAt: Date.now(),
+            }));
+        } catch (e) {
+            // Storage unavailable, full, or disabled - caching is an
+            // optimisation only, safe to skip.
+        }
+    }
+
+    /**
+     * Apply a cached decision (see readCache()) to the DOM immediately, so
+     * the filter bar can be revealed without waiting for a fresh background
+     * fetch: hide whichever groups were hidden last time, rebuild the Roles
+     * group from the cached role list, and restore whichever filters were
+     * last active - which takes precedence over the server-rendered
+     * "|default" markers, since it reflects the user's own last choice.
+     *
+     * @param {Object} cached
+     */
+    applyCachedState(cached) {
+        this.filterContainer.querySelectorAll(SELECTORS.GROUP).forEach(group => {
+            const key = this.getGroupKey(group);
+            group.classList.toggle('enhancedcourseoverview-group-hidden', cached.hiddenGroups.indexOf(key) !== -1);
+        });
+
+        this.renderRolesGroup(cached.roles, new Set(cached.activePatterns[ROLE_CATEGORY] || []));
+
+        this.filterContainer.querySelectorAll(SELECTORS.FILTER_BUTTON).forEach(button => {
+            const group = button.closest(SELECTORS.GROUP);
+            const category = group ? this.getGroupCategory(group) : DEFAULT_CATEGORY;
+            const patterns = cached.activePatterns[category] || [];
+            button.classList.toggle('active', patterns.indexOf(button.getAttribute('data-pattern')) !== -1);
+        });
+
+        this.syncButtonStates();
     }
 
     /**
@@ -628,6 +809,7 @@ class CourseFilter {
             this.restoreLayout();
             this.countIndicator.textContent = '';
             this.toggleEmptyMessage(false);
+            this.writeCache();
             return;
         }
 
@@ -639,6 +821,7 @@ class CourseFilter {
         }
 
         this.applyFilters(activeByCategory);
+        this.writeCache();
     }
 
     /**
@@ -695,6 +878,8 @@ class CourseFilter {
             if (this.hasActiveFilters()) {
                 await this.refresh();
             }
+
+            this.writeCache();
         } finally {
             this.syncing = false;
         }
@@ -721,9 +906,18 @@ class CourseFilter {
 /**
  * Initialise the filter buttons for one block instance.
  *
+ * The filter bar starts hidden (see PENDING_CLASS on the template) so it
+ * never flashes fully-visible-then-narrowed while this waits to find out
+ * which groups actually have matches. If a cached decision from a previous
+ * page load exists for this user, this instance, and the current view, it's
+ * applied and revealed immediately - no waiting on a fetch at all - with a
+ * background fetch afterwards to keep that cache accurate for next time.
+ * Otherwise, it waits on the real fetch before revealing anything.
+ *
  * @param {String} uniqid The DOM id of this block instance's filter container.
+ * @param {Number} userid The current user's id, used to scope the cache.
  */
-export const init = async(uniqid) => {
+export const init = async(uniqid, userid) => {
     const filterContainer = document.getElementById(uniqid);
     if (!filterContainer) {
         return;
@@ -742,6 +936,9 @@ export const init = async(uniqid) => {
     const block = filterContainer.closest('.block') || document.body;
     const coursesView = block.querySelector(SELECTORS.COURSES_VIEW);
     if (!coursesView) {
+        // Nothing this module can do without it - reveal whatever the
+        // server rendered rather than leaving the bar hidden forever.
+        filterContainer.classList.remove(PENDING_CLASS);
         return;
     }
 
@@ -752,20 +949,50 @@ export const init = async(uniqid) => {
         {key: 'filter:rolesgroup', component: 'block_enhancedcourseoverview'},
     ]);
 
-    const filter = new CourseFilter(coursesView, filterContainer, {loading, nomatches, showing, rolesgroup});
+    const filter = new CourseFilter(coursesView, filterContainer, {loading, nomatches, showing, rolesgroup}, userid);
 
     filterContainer.querySelectorAll(SELECTORS.GROUP).forEach(group => filter.wireGroup(group));
 
     filter.watchForViewChanges();
 
-    // Group visibility (and the Roles group) come from a background
-    // webservice call, not from anything rendered, so it doesn't need to
-    // wait for block_myoverview's own AJAX render at all - it can run
-    // immediately.
-    await filter.updateGroupVisibility();
+    const cached = filter.readCache();
+    if (cached) {
+        filter.applyCachedState(cached);
+        filter.reveal();
+
+        // Apply the (possibly default) selection against the rendered
+        // course list, then quietly refresh in the background to keep the
+        // cache accurate for next time - the bar is already visible and
+        // usable throughout this, so nothing needs to wait on it.
+        await filter.refresh();
+        filter.updateGroupVisibility().then(async() => {
+            if (filter.hasActiveFilters()) {
+                await filter.refresh();
+            }
+            filter.writeCache();
+            return null;
+        }).catch(() => {
+            // Best-effort background refresh - a failure here just means
+            // the cache stays as it was, not a user-visible error.
+        });
+        return;
+    }
+
+    try {
+        // Group visibility (and the Roles group) come from a background
+        // webservice call, not from anything rendered, so it doesn't need
+        // to wait for block_myoverview's own AJAX render at all - it can
+        // run immediately.
+        await filter.updateGroupVisibility();
+    } finally {
+        // Always reveal, even if the fetch failed - better to show an
+        // unfiltered bar than hide it forever.
+        filter.reveal();
+    }
 
     // Apply any filters marked active by default. If none are, this leaves
     // the rendered course list exactly as block_myoverview produced it -
     // no forced full-course load, no extra scroll.
     await filter.refresh();
+    filter.writeCache();
 };
