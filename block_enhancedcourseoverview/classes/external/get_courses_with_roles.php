@@ -97,16 +97,21 @@ class get_courses_with_roles extends external_api {
         // Delegate entirely to core for the course list itself: no limit
         // (we need every matching course, not one page of them), and no
         // search value - this function isn't wired up to the dashboard's
-        // search box.
+        // search box. Deliberately does not restrict $requiredfields to
+        // ['id', 'fullname']: core needs fields like enddate internally to
+        // compute the classification itself, and on some Moodle versions
+        // restricting requiredfields makes its own return-value validation
+        // throw a coding_exception ("Unexpected property enddate") because
+        // the field it still needs internally isn't declared in the
+        // narrowed structure. Taking the default (full) field set and
+        // picking out just id/fullname below avoids that entirely.
         $result = core_course_external::get_enrolled_courses_by_timeline_classification(
             $params['classification'],
             0,
             0,
             $params['sort'],
             $params['customfieldname'],
-            $params['customfieldvalue'],
-            null,
-            ['id', 'fullname']
+            $params['customfieldvalue']
         );
 
         $courses = [];
