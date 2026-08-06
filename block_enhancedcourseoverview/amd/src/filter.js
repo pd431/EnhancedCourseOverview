@@ -476,6 +476,16 @@ export const init = async(uniqid) => {
         return;
     }
 
+    // Guard against being initialised twice on the same DOM, e.g. if
+    // Moodle re-renders this block via AJAX without a full page reload.
+    // Without this, every click listener below would get attached a
+    // second time, and a single click would fire both, e.g. toggling a
+    // button's own "active" class on then back off within the same tap.
+    if (filterContainer.dataset.enhancedcourseoverviewInit) {
+        return;
+    }
+    filterContainer.dataset.enhancedcourseoverviewInit = 'true';
+
     const block = filterContainer.closest('.block') || document.body;
     const coursesView = block.querySelector(SELECTORS.COURSES_VIEW);
     if (!coursesView) {
