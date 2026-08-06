@@ -80,6 +80,7 @@ const CACHE_VERSION = 1;
 const CACHE_PREFIX = 'block_enhancedcourseoverview:filters:';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const PENDING_CLASS = 'enhancedcourseoverview-pending';
+const COURSES_PENDING_CLASS = 'enhancedcourseoverview-courses-pending';
 
 // Cache of pattern string -> compiled RegExp (or null for a plain-substring
 // pattern), shared across every filter instance on the page since patterns
@@ -532,6 +533,29 @@ class CourseFilter {
     }
 
     /**
+     * Hide the actual rendered course list while a filter that's about to
+     * be applied (from cache, or a server-rendered "|default") is still
+     * being loaded/computed - otherwise block_myoverview's own unfiltered
+     * render (and this module's own further course-loading, see
+     * loadAllCourses()) would flash fully-visible first, only to shrink
+     * once filtering actually catches up a moment later. Only ever called
+     * when a filter is already known to be active before anything has
+     * loaded; if none is, the course list is left alone entirely, exactly
+     * as before. Visibility (not display) keeps its layout space reserved.
+     */
+    hideCourses() {
+        this.coursesView.classList.add(COURSES_PENDING_CLASS);
+    }
+
+    /**
+     * Undo hideCourses(). Safe to call unconditionally, even if the course
+     * list was never hidden.
+     */
+    showCourses() {
+        this.coursesView.classList.remove(COURSES_PENDING_CLASS);
+    }
+
+    /**
      * Read this block instance's cached filter state for the current view
      * (see getViewKey()), if any exists, isn't expired, and matches the
      * cache format this version of the code writes. Anything else - no
@@ -914,6 +938,13 @@ class CourseFilter {
  * background fetch afterwards to keep that cache accurate for next time.
  * Otherwise, it waits on the real fetch before revealing anything.
  *
+ * If a filter is already known to be active before anything has loaded -
+ * from a cached selection, or a server-rendered "|default" - the course
+ * list itself is also hidden until that filter has actually been applied,
+ * so the user never sees the full unfiltered list appear and then shrink.
+ * With no such filter, the course list is left alone entirely, exactly as
+ * block_myoverview would render it on its own.
+ *
  * @param {String} uniqid The DOM id of this block instance's filter container.
  * @param {Number} userid The current user's id, used to scope the cache.
  */
@@ -960,11 +991,21 @@ export const init = async(uniqid, userid) => {
         filter.applyCachedState(cached);
         filter.reveal();
 
-        // Apply the (possibly default) selection against the rendered
-        // course list, then quietly refresh in the background to keep the
-        // cache accurate for next time - the bar is already visible and
+        // A cached selection may have just marked filters active - hide
+        // the course list until refresh() below has actually applied them,
+        // so nothing flashes unfiltered first. No-op if nothing's active.
+        if (filter.hasActiveFilters()) {
+            filter.hideCourses();
+        }
+        try {
+            await filter.refresh();
+        } finally {
+            filter.showCourses();
+        }
+
+        // Quietly refresh in the background to keep the cache accurate for
+        // next time - the bar (and course list) are already visible and
         // usable throughout this, so nothing needs to wait on it.
-        await filter.refresh();
         filter.updateGroupVisibility().then(async() => {
             if (filter.hasActiveFilters()) {
                 await filter.refresh();
@@ -976,6 +1017,13 @@ export const init = async(uniqid, userid) => {
             // the cache stays as it was, not a user-visible error.
         });
         return;
+    }
+
+    // No cache, but the server may still have rendered one or more filters
+    // active via "|default" - hide the course list up front if so, same
+    // reasoning as the cached branch above.
+    if (filter.hasActiveFilters()) {
+        filter.hideCourses();
     }
 
     try {
@@ -993,6 +1041,10 @@ export const init = async(uniqid, userid) => {
     // Apply any filters marked active by default. If none are, this leaves
     // the rendered course list exactly as block_myoverview produced it -
     // no forced full-course load, no extra scroll.
-    await filter.refresh();
+    try {
+        await filter.refresh();
+    } finally {
+        filter.showCourses();
+    }
     filter.writeCache();
 };

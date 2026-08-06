@@ -27,6 +27,18 @@
     visibility: hidden;
 }
 
+/*
+ * Hides the actual course list (block_myoverview's own [data-region=
+ * "courses-view"]) while a filter that's already known to be active - from
+ * a cached selection or a server-rendered "|default" - is still being
+ * applied, so the full unfiltered list never flashes visible first. Only
+ * ever added when a filter is already active before anything has loaded;
+ * left alone entirely otherwise.
+ */
+.enhancedcourseoverview-courses-pending {
+    visibility: hidden;
+}
+
 .filter-group-toggle {
     cursor: pointer;
 }
