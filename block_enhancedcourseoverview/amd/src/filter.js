@@ -17,15 +17,24 @@
  * Course filter buttons for the Enhanced Course Overview block.
  *
  * Which filter groups have any matching course is decided from a
- * lightweight background call to block_myoverview's own repository module
- * (the same webservice it uses to fetch course data itself), asking only
- * for course names - not by forcing every page of the visible course list
- * to render. This means opening the dashboard never changes what's
- * visible or how far a user has to scroll, whether or not any filter is
- * active by default. A MutationObserver on the courses-view region reacts
- * whenever Moodle's own grouping/sort/search controls change it, so filter
- * groups stay accurate and any currently-active filter is silently
- * reapplied against the new course list, instead of going stale.
+ * lightweight background call to this plugin's own webservice
+ * (block_enhancedcourseoverview_get_courses_with_roles - a thin wrapper
+ * around core's own course-fetching function that additionally attaches
+ * the current user's role(s) in each course), asking only for course names
+ * and roles - not by forcing every page of the visible course list to
+ * render. This means opening the dashboard never changes what's visible or
+ * how far a user has to scroll, whether or not any filter is active by
+ * default. A MutationObserver on the courses-view region reacts whenever
+ * Moodle's own grouping/sort/search controls change it, so filter groups
+ * stay accurate and any currently-active filter is silently reapplied
+ * against the new course list, instead of going stale.
+ *
+ * Filters are grouped into categories (year/term groups are all "term";
+ * an auto-generated "Roles" group, built only when the user holds more
+ * than one distinct role, is "role"). Filters within the same category
+ * OR together; different categories AND together - e.g. activating
+ * "Term 2" and "Editor" shows Term 2 courses where the user is an Editor,
+ * not the union of the two.
  *
  * Actually filtering (hiding non-matching course cards once the user
  * activates a filter) still works against the rendered DOM, and still
@@ -39,7 +48,7 @@
  */
 
 import Str from 'core/str';
-import * as Repository from 'block_myoverview/repository';
+import Ajax from 'core/ajax';
 
 const SELECTORS = {
     FILTER_BUTTON: '.filter-term-btn',
@@ -62,6 +71,8 @@ const INITIAL_RENDER_TIMEOUT_MS = 15000;
 const INITIAL_RENDER_POLL_MS = 150;
 const MAX_NEXT_CLICKS = 500;
 const VIEW_CHANGE_DEBOUNCE_MS = 300;
+const ROLE_CATEGORY = 'role';
+const DEFAULT_CATEGORY = 'term';
 
 // Cache of pattern string -> compiled RegExp (or null for a plain-substring
 // pattern), shared across every filter instance on the page since patterns
@@ -200,7 +211,7 @@ class CourseFilter {
     /**
      * @param {Element} coursesView The block_myoverview [data-region="courses-view"] element.
      * @param {Element} filterContainer The container holding the filter buttons.
-     * @param {Object} strings Localised strings, keyed by 'loading', 'nomatches' and 'showing'.
+     * @param {Object} strings Localised strings, keyed by 'loading', 'nomatches', 'showing' and 'rolesgroup'.
      */
     constructor(coursesView, filterContainer, strings) {
         this.coursesView = coursesView;
@@ -211,6 +222,10 @@ class CourseFilter {
         this.filtering = false;
         this.originalActivePage = null;
         this.syncing = false;
+        // Map of course id (string) -> Set of role shortnames, built from
+        // the last background fetch. Used to filter rendered cards by role
+        // via their data-course-id, without a further request per card.
+        this.courseRolesById = new Map();
 
         this.countIndicator = document.createElement('div');
         this.countIndicator.className = 'course-count-indicator text-muted small';
@@ -335,9 +350,13 @@ class CourseFilter {
     }
 
     /**
-     * Fetch the names of every course matching the current view (grouping/
-     * sort/custom field), via the same webservice block_myoverview itself
-     * uses - independent of, and without forcing, anything being rendered.
+     * Fetch the current user's courses matching the current view (grouping/
+     * sort/custom field), with their role(s) in each, via this plugin's own
+     * webservice - independent of, and without forcing, anything being
+     * rendered. That webservice is a thin wrapper around core's own
+     * course-fetching function (see the PHP class for details), so this
+     * stays in sync with however Moodle's own enrolment/classification
+     * rules work, rather than this module reimplementing them.
      *
      * Note: while a user is actively using block_myoverview's own search
      * box, this still fetches by the last-selected grouping rather than the
@@ -346,83 +365,173 @@ class CourseFilter {
      * during an active search; it corrects itself once the search is
      * cleared.
      *
-     * @return {Promise<?String[]>} Course names, or null if the request failed.
+     * @return {Promise<?Array>} Courses ({id, fullname, roles}), or null if the request failed.
      */
-    async fetchCourseNames() {
+    async fetchCourseData() {
         const params = this.getViewParams();
         try {
-            const response = await Repository.getEnrolledCoursesByTimeline({
-                classification: params.classification,
-                limit: 0,
-                offset: 0,
-                sort: params.sort,
-                customfieldname: params.customfieldname,
-                customfieldvalue: params.customfieldvalue,
-                requiredfields: ['fullname'],
-            });
-            return (response.courses || []).map(course => course.fullname || '');
+            const response = await Ajax.call([{
+                methodname: 'block_enhancedcourseoverview_get_courses_with_roles',
+                args: {
+                    classification: params.classification,
+                    sort: params.sort,
+                    customfieldname: params.customfieldname,
+                    customfieldvalue: params.customfieldvalue,
+                },
+            }])[0];
+            return response.courses || [];
         } catch (e) {
             return null;
         }
     }
 
     /**
+     * Get the effective filter category for a group element: whatever its
+     * data-category says, or the default "term" category if unset (every
+     * PHP-rendered year/term group).
+     *
+     * @param {Element} group
+     * @return {String}
+     */
+    getGroupCategory(group) {
+        return group.dataset.category || DEFAULT_CATEGORY;
+    }
+
+    /**
+     * Build (or rebuild) the "Roles" filter group from the distinct roles
+     * found across the given course data, preserving whichever role
+     * buttons were already active. Only created at all when the user holds
+     * more than one distinct role - with just one, a role filter has
+     * nothing meaningful to narrow down.
+     *
+     * @param {Array} courseData
+     */
+    rebuildRolesGroup(courseData) {
+        const existing = this.filterContainer.querySelector(`${SELECTORS.GROUP}[data-category="${ROLE_CATEGORY}"]`);
+        const previouslyActive = existing ?
+            new Set(Array.from(
+                existing.querySelectorAll(`${SELECTORS.FILTER_BUTTON}.active`),
+                button => button.getAttribute('data-pattern')
+            )) :
+            new Set();
+        if (existing) {
+            existing.remove();
+        }
+
+        const roleNamesByShortname = new Map();
+        courseData.forEach(course => {
+            (course.roles || []).forEach(role => {
+                if (!roleNamesByShortname.has(role.shortname)) {
+                    roleNamesByShortname.set(role.shortname, role.name);
+                }
+            });
+        });
+
+        if (roleNamesByShortname.size <= 1) {
+            return;
+        }
+
+        const group = document.createElement('div');
+        group.className = 'btn-group btn-group-sm mb-1';
+        group.dataset.category = ROLE_CATEGORY;
+
+        const header = document.createElement('button');
+        header.type = 'button';
+        header.className = 'btn btn-outline-secondary filter-group-toggle';
+        header.setAttribute('aria-pressed', 'false');
+        header.textContent = this.strings.rolesgroup;
+        group.appendChild(header);
+
+        roleNamesByShortname.forEach((name, shortname) => {
+            const isactive = previouslyActive.has(shortname);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-outline-primary filter-term-btn' + (isactive ? ' active' : '');
+            button.setAttribute('data-pattern', shortname);
+            button.setAttribute('aria-pressed', isactive ? 'true' : 'false');
+            button.textContent = name;
+            group.appendChild(button);
+        });
+
+        this.filterContainer.appendChild(group);
+        this.wireGroup(group);
+    }
+
+    /**
      * Hide filter groups whose patterns match none of the user's courses in
      * the current view, and show groups that do have at least one match.
-     * Based on a background fetch of course names (see fetchCourseNames()),
-     * not on what happens to be rendered, so this never forces the visible
-     * course list to expand and is safe to call any time, including before
-     * block_myoverview has rendered anything at all.
+     * Also (re)builds the Roles group and the course id -> roles lookup
+     * used by applyFilters(). Based on a background fetch (see
+     * fetchCourseData()), not on what happens to be rendered, so this never
+     * forces the visible course list to expand and is safe to call any
+     * time, including before block_myoverview has rendered anything at all.
      *
      * @return {Promise}
      */
     async updateGroupVisibility() {
-        const courseNames = await this.fetchCourseNames();
-        if (courseNames === null) {
-            // Request failed - leave whatever visibility state groups
-            // already have rather than guessing (and potentially hiding
-            // everything) from no data.
+        const courseData = await this.fetchCourseData();
+        if (courseData === null) {
+            // Request failed - leave whatever state groups already have
+            // rather than guessing (and potentially hiding everything, or
+            // dropping role data) from no data.
             return;
         }
 
+        this.courseRolesById = new Map(
+            courseData.map(course => [String(course.id), new Set((course.roles || []).map(role => role.shortname))])
+        );
+
+        this.rebuildRolesGroup(courseData);
+
         this.filterContainer.querySelectorAll(SELECTORS.GROUP).forEach(group => {
+            const category = this.getGroupCategory(group);
             const patterns = Array.from(
                 group.querySelectorAll(SELECTORS.FILTER_BUTTON),
                 button => button.getAttribute('data-pattern')
             );
-            const hasMatch = patterns.some(
-                pattern => courseNames.some(name => patternMatches(name, pattern))
-            );
+            const hasMatch = patterns.some(pattern => courseData.some(course => category === ROLE_CATEGORY ?
+                (course.roles || []).some(role => role.shortname === pattern) :
+                patternMatches(course.fullname || '', pattern)));
             group.classList.toggle('enhancedcourseoverview-group-hidden', !hasMatch);
         });
     }
 
     /**
-     * Show or hide course cards depending on whether their name matches one
-     * of the active filter patterns. While any filter is active, every
-     * loaded page is unhidden (block_myoverview otherwise only shows the
-     * page it currently considers "active") and its own pagination controls
-     * are hidden, since every course is already loaded and there's nothing
-     * left to page through.
+     * Show or hide course cards depending on whether they match the active
+     * filters: patterns within the same category are OR'd together (any
+     * one match is enough), different categories are AND'd (a course must
+     * satisfy every category that has at least one active filter). While
+     * any filter is active, every loaded page is unhidden (block_myoverview
+     * otherwise only shows the page it currently considers "active") and
+     * its own pagination controls are hidden, since every course is
+     * already loaded and there's nothing left to page through.
      *
-     * @param {String[]} patterns Active filter patterns (OR'd together).
+     * @param {Object} activeByCategory e.g. {term: [...patterns], role: [...shortnames]}
      */
-    applyFilters(patterns) {
+    applyFilters(activeByCategory) {
         this.coursesView.querySelectorAll(SELECTORS.PAGE).forEach(page => page.classList.remove('hidden'));
         const pagingControls = this.coursesView.querySelector(SELECTORS.PAGING_CONTROLS);
         if (pagingControls) {
             pagingControls.style.setProperty('display', 'none');
         }
 
+        const categories = Object.keys(activeByCategory).filter(category => activeByCategory[category].length > 0);
         const cards = this.coursesView.querySelectorAll(SELECTORS.COURSE_ITEM);
         let visible = 0;
 
         cards.forEach(card => {
             const column = card.closest(SELECTORS.COLUMN) || card;
-
             const nameEl = card.querySelector(SELECTORS.COURSE_NAME);
             const haystack = (nameEl ? nameEl.textContent : card.textContent) || '';
-            const matches = patterns.some(pattern => patternMatches(haystack, pattern));
+            const courseRoles = this.courseRolesById.get(card.getAttribute('data-course-id')) || new Set();
+
+            const matches = categories.every(category => {
+                const patterns = activeByCategory[category];
+                if (category === ROLE_CATEGORY) {
+                    return patterns.some(pattern => courseRoles.has(pattern));
+                }
+                return patterns.some(pattern => patternMatches(haystack, pattern));
+            });
 
             if (matches) {
                 column.style.removeProperty('display');
@@ -491,22 +600,29 @@ class CourseFilter {
     }
 
     /**
-     * Re-read which filter buttons are currently active and re-apply
-     * filtering accordingly. Used both after a user interaction and once at
-     * startup, to pick up any filters marked active by default. Only loads
-     * every course (loadAllCourses()) when there's actually a filter to
-     * apply - if none are active, this does nothing to the rendered course
-     * list at all.
+     * Re-read which filter buttons are currently active, grouped by
+     * category, and re-apply filtering accordingly. Used both after a user
+     * interaction and once at startup, to pick up any filters marked active
+     * by default. Only loads every course (loadAllCourses()) when there's
+     * actually a filter to apply - if none are active, this does nothing to
+     * the rendered course list at all.
      *
      * @return {Promise}
      */
     async refresh() {
         this.syncButtonStates();
 
-        const active = this.filterContainer.querySelectorAll(`${SELECTORS.FILTER_BUTTON}.active`);
-        const patterns = Array.from(active, button => button.getAttribute('data-pattern'));
+        const activeByCategory = {};
+        this.filterContainer.querySelectorAll(`${SELECTORS.FILTER_BUTTON}.active`).forEach(button => {
+            const group = button.closest(SELECTORS.GROUP);
+            const category = group ? this.getGroupCategory(group) : DEFAULT_CATEGORY;
+            if (!activeByCategory[category]) {
+                activeByCategory[category] = [];
+            }
+            activeByCategory[category].push(button.getAttribute('data-pattern'));
+        });
 
-        if (patterns.length === 0) {
+        if (Object.keys(activeByCategory).length === 0) {
             this.restoreLayout();
             this.countIndicator.textContent = '';
             this.toggleEmptyMessage(false);
@@ -520,7 +636,34 @@ class CourseFilter {
             await this.loadAllCourses();
         }
 
-        this.applyFilters(patterns);
+        this.applyFilters(activeByCategory);
+    }
+
+    /**
+     * Wire up click handling for every filter button and group toggle
+     * within a single group element. Used both for the PHP-rendered groups
+     * at init, and for the dynamically-built Roles group.
+     *
+     * @param {Element} group
+     */
+    wireGroup(group) {
+        group.querySelectorAll(SELECTORS.FILTER_BUTTON).forEach(button => {
+            button.addEventListener('click', event => {
+                event.preventDefault();
+                button.classList.toggle('active');
+                this.refresh();
+            });
+        });
+
+        group.querySelectorAll(SELECTORS.GROUP_TOGGLE).forEach(toggle => {
+            toggle.addEventListener('click', event => {
+                event.preventDefault();
+                const buttons = group.querySelectorAll(SELECTORS.FILTER_BUTTON);
+                const allActive = Array.from(buttons).every(button => button.classList.contains('active'));
+                buttons.forEach(button => button.classList.toggle('active', !allActive));
+                this.refresh();
+            });
+        });
     }
 
     /**
@@ -600,38 +743,23 @@ export const init = async(uniqid) => {
         return;
     }
 
-    const [loading, nomatches, showing] = await Str.get_strings([
+    const [loading, nomatches, showing, rolesgroup] = await Str.get_strings([
         {key: 'filter:loading', component: 'block_enhancedcourseoverview'},
         {key: 'filter:nomatches', component: 'block_enhancedcourseoverview'},
         {key: 'filter:showing', component: 'block_enhancedcourseoverview'},
+        {key: 'filter:rolesgroup', component: 'block_enhancedcourseoverview'},
     ]);
 
-    const filter = new CourseFilter(coursesView, filterContainer, {loading, nomatches, showing});
+    const filter = new CourseFilter(coursesView, filterContainer, {loading, nomatches, showing, rolesgroup});
 
-    filterContainer.querySelectorAll(SELECTORS.FILTER_BUTTON).forEach(button => {
-        button.addEventListener('click', event => {
-            event.preventDefault();
-            button.classList.toggle('active');
-            filter.refresh();
-        });
-    });
-
-    filterContainer.querySelectorAll(SELECTORS.GROUP_TOGGLE).forEach(toggle => {
-        toggle.addEventListener('click', event => {
-            event.preventDefault();
-            const group = toggle.closest(SELECTORS.GROUP);
-            const buttons = group.querySelectorAll(SELECTORS.FILTER_BUTTON);
-            const allActive = Array.from(buttons).every(button => button.classList.contains('active'));
-            buttons.forEach(button => button.classList.toggle('active', !allActive));
-            filter.refresh();
-        });
-    });
+    filterContainer.querySelectorAll(SELECTORS.GROUP).forEach(group => filter.wireGroup(group));
 
     filter.watchForViewChanges();
 
-    // Group visibility comes from a background webservice call, not from
-    // anything rendered, so it doesn't need to wait for block_myoverview's
-    // own AJAX render at all - it can run immediately.
+    // Group visibility (and the Roles group) come from a background
+    // webservice call, not from anything rendered, so it doesn't need to
+    // wait for block_myoverview's own AJAX render at all - it can run
+    // immediately.
     await filter.updateGroupVisibility();
 
     // Apply any filters marked active by default. If none are, this leaves

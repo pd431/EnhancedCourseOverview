@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details for the Enhanced Course Overview block.
+ * External functions for the Enhanced Course Overview block.
  *
  * @package    block_enhancedcourseoverview
  * @copyright  2023 Your Name <your.email@example.com>
@@ -24,11 +24,14 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026080411;        // The current plugin version (Date: YYYYMMDDXX)
-$plugin->requires  = 2023041800;        // Requires Moodle 4.2 or later
-$plugin->component = 'block_enhancedcourseoverview'; // Full name of the plugin
-$plugin->dependencies = [
-    'block_myoverview' => 2023041800    // The block_myoverview plugin must be present
+$functions = [
+    'block_enhancedcourseoverview_get_courses_with_roles' => [
+        'classname'   => 'block_enhancedcourseoverview\external\get_courses_with_roles',
+        'methodname'  => 'execute',
+        'description' => 'Get the current user\'s courses matching a timeline classification, ' .
+            'with the roles the user holds in each course.',
+        'type'        => 'read',
+        'ajax'        => true,
+        'loginrequired' => true,
+    ],
 ];
-$plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '0.8.0';

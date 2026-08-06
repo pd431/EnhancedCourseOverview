@@ -6,9 +6,10 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 
 - Simple text-based filters configured through the plugin settings, matched against course titles/codes as substrings, a digit wildcard, or full regex - not tied to any particular course code convention, since a pattern only needs to match the part of the code it cares about (typically just term+year), not the whole thing
 - Filter buttons organized in groups; click a group's header to toggle every filter in that group at once
-- Which filter groups have matches is decided via a lightweight background request for course names - not by forcing every course to render - so opening the dashboard never changes what's visible or how far you need to scroll, whether or not a filter is active by default
+- Which filter groups have matches is decided via a lightweight background request for course data - not by forcing every course to render - so opening the dashboard never changes what's visible or how far you need to scroll, whether or not a filter is active by default
 - Groups with no matching courses are hidden automatically, so the filter bar doesn't clutter the dashboard with irrelevant years
 - Filters stay in sync when you switch Moodle's own course-list controls (the All/Past/Future/etc. grouping, sort order, custom field), instead of silently going stale
+- An automatic "Roles" filter appears whenever a user holds more than one role across their courses (e.g. Editor in some, Student in others), with no configuration needed. Filters within a group OR together (any Term 1 or Term 2 course); a Term filter and the Roles filter AND together (Term 2 courses where you're also an Editor), not OR
 - One or more filters can be configured to be active by default when a user opens their dashboard
 - JavaScript ships as a proper AMD module (`block_enhancedcourseoverview/filter`), scoped per block instance
 - Buttons use plain Bootstrap classes (`.btn-outline-primary`/`.btn-outline-secondary`, `.btn-group-sm`) with no custom colours, border-radius, or shadow - they pick up whatever the active theme actually set, including a customised Boost/Boost Union theme
@@ -102,16 +103,20 @@ Either way, this applies every time the block renders — it is not a per-user p
 1. Add the "Enhanced Course Overview" block to your dashboard
 2. Use the filter buttons to show only courses matching specific patterns
 3. Click a button to activate the filter, click again to deactivate; click a group's header to toggle the whole group
-4. Multiple filters can be active simultaneously (OR logic)
+4. Filters within the same group (or the same auto-generated Roles group) OR together - activating "Term 1" and "Term 2" shows courses matching either. A Term filter and a Role filter AND together - activating "Term 2" and "Editor" shows only Term 2 courses where you're also an Editor, not the union of the two
 5. Opening the dashboard doesn't change what's shown or how far you have to scroll - group visibility is decided in the background (see below), and no course is force-loaded unless you (or a default) actually activate a filter, in which case there's a brief "Loading all courses..." moment while every matching course loads.
 
 ## How this works
 
-### Deciding which filter groups to show
+### Deciding which filter groups to show, and role filtering
 
-`block_myoverview` (the standard Course Overview block) has its own repository module (`block_myoverview/repository`) for fetching the user's enrolled courses from the server - the same webservice call it uses to render itself. This plugin calls that directly, asking only for course names, to decide which filter groups have at least one match. This is a small, independent background request - it doesn't touch the rendered course list, doesn't force anything to load, and works immediately without waiting for `block_myoverview` to finish rendering.
+This plugin defines its own webservice, `block_enhancedcourseoverview_get_courses_with_roles` (see `classes/external/get_courses_with_roles.php`), to fetch the user's courses for the current view in the background - without touching or forcing anything to render. Rather than reimplementing course enrolment/classification logic, this webservice calls Moodle's own `core_course_external::get_enrolled_courses_by_timeline_classification()` directly (the exact function `block_myoverview` itself uses) and only adds each course's role(s) for the current user to its output, so this plugin stays riding on core's own logic instead of forking it - the same approach Moodle core itself uses in `core_course\external\get_enrolled_courses_with_action_events_by_timeline_classification` to add calendar event data. It only ever returns the logged-in user's own courses and own roles - there's no way to query another user's data through it.
 
-A `MutationObserver` watches the courses-view region for `block_myoverview` rebuilding its course list (the user switched the All/Past/Future/etc. grouping, sort order, or custom field selector). When that happens, this plugin re-runs the same background check, and - if a filter is currently active - re-applies it against the freshly rendered list. Without this, switching Moodle's own controls would silently leave a filter showing as "active" while doing nothing, since the course list it was filtering had just been replaced. One known gap: while the user is actively using `block_myoverview`'s own search box, group visibility is still checked against the last-selected grouping rather than the search results, since the search term isn't reflected anywhere group visibility can read it. It corrects itself once the search is cleared.
+This single background request drives two things:
+- **Group visibility**: term/year groups are checked against course names as before; a group is hidden if none of its patterns match any course in the current view.
+- **The Roles filter**: if the user holds more than one distinct role across their courses in the current view (e.g. Editor in some, Student in others), a "Roles" group is generated automatically - one button per distinct role, labelled with its normal Moodle display name. With only one role (the common case for most students), there's nothing meaningful to filter by, so no Roles group appears at all. It's rebuilt on every view change, preserving whichever role buttons were already active.
+
+A `MutationObserver` watches the courses-view region for `block_myoverview` rebuilding its course list (the user switched the All/Past/Future/etc. grouping, sort order, or custom field selector). When that happens, this plugin re-runs the same background check (including rebuilding the Roles group), and - if a filter is currently active - re-applies it against the freshly rendered list. Without this, switching Moodle's own controls would silently leave a filter showing as "active" while doing nothing, since the course list it was filtering had just been replaced. One known gap: while the user is actively using `block_myoverview`'s own search box, group visibility is still checked against the last-selected grouping rather than the search results, since the search term isn't reflected anywhere group visibility can read it. It corrects itself once the search is cleared.
 
 ### Actually filtering, once a filter is activated
 
@@ -121,6 +126,8 @@ The standard Course Overview block doesn't have a "load more" button. It has a "
 2. Prefers clicking "All" in the items-per-page dropdown, if it's offered - one request instead of many. Moodle only offers "All" for up to 100 total courses; above that it isn't shown at all.
 3. If "All" isn't available, clicks "Next" repeatedly until it's exhausted. `block_myoverview` keeps every page it fetches in the DOM (hiding inactive ones rather than discarding them), so this doesn't repeat work.
 4. While any filter is active, every loaded page is temporarily unhidden (so filtering can show matches from any page at once) and `block_myoverview`'s own pagination controls are hidden, since everything is already loaded and paging through it no longer applies. Clearing every filter restores `block_myoverview`'s pagination exactly as it was.
+
+This applies equally whether the active filter is a Term pattern or a Role: role matching itself doesn't need any extra network request (it looks up each rendered card's `data-course-id` against the role data already fetched for group visibility), but every matching course still needs to actually be rendered as a card before it can be shown, hence loading every page regardless of which kind of filter triggered it.
 
 This was reverse-engineered by reading Moodle's actual `blocks/myoverview` and `lib/templates/paged_content_*`/`lib/amd/src/paged_content_*` source (branch `MOODLE_405_STABLE`), not guessed - an earlier version of this plugin assumed a "load more" button and a single wrapping course-list container that don't actually exist in Moodle, which meant that version's course-loading and empty-state logic were silently no-ops. It's still only been verified by reading source, not against a running Moodle site — test in staging.
 

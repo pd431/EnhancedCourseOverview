@@ -93,7 +93,7 @@ class block_enhancedcourseoverview extends block_myoverview {
         $this->page->requires->css('/blocks/enhancedcourseoverview/styles.css');
 
         $this->page->requires->strings_for_js(
-            ['filter:loading', 'filter:nomatches'],
+            ['filter:loading', 'filter:nomatches', 'filter:showing', 'filter:rolesgroup'],
             'block_enhancedcourseoverview'
         );
         $this->page->requires->js_call_amd('block_enhancedcourseoverview/filter', 'init', [$uniqid]);

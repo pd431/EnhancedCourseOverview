@@ -30,6 +30,7 @@ $string['enhancedcourseoverview:myaddinstance'] = 'Add a new Enhanced Course Ove
 $string['filter:loading'] = 'Loading all courses...';
 $string['filter:nomatches'] = 'No courses match the selected filters.';
 $string['filter:showing'] = 'Showing {visible} of {total} courses';
+$string['filter:rolesgroup'] = 'Roles';
 
 // Settings
 $string['settings:heading'] = 'Filter Configuration';
