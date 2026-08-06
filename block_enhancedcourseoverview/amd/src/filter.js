@@ -16,21 +16,22 @@
 /**
  * Course filter buttons for the Enhanced Course Overview block.
  *
- * block_myoverview renders only a loading skeleton server-side; the actual
- * course cards, and its pagination (a "Show N / All" items-per-page
- * dropdown plus a Next/Previous paging bar - there is no "load more"
- * button), are built entirely client-side by block_myoverview's own AMD
- * module (core/paged_content_*) after an AJAX call. This module first waits
- * for that initial render, then - to decide accurately which filter groups
- * have matches, and to filter across every course rather than just the
- * active page - drives that same pagination: it selects "Show all" when
- * available (courses up to Moodle's own cap of 100, above which the option
- * isn't offered), otherwise clicks "Next" until it's exhausted. Because
- * block_myoverview keeps every page it has fetched in the DOM (hiding
- * inactive ones with a "hidden" class rather than removing them), once
- * loaded this module can filter across all of them by temporarily lifting
- * that hidden state, and puts it back exactly as block_myoverview left it
- * once every filter is cleared.
+ * Which filter groups have any matching course is decided from a
+ * lightweight background call to block_myoverview's own repository module
+ * (the same webservice it uses to fetch course data itself), asking only
+ * for course names - not by forcing every page of the visible course list
+ * to render. This means opening the dashboard never changes what's
+ * visible or how far a user has to scroll, whether or not any filter is
+ * active by default. A MutationObserver on the courses-view region reacts
+ * whenever Moodle's own grouping/sort/search controls change it, so filter
+ * groups stay accurate and any currently-active filter is silently
+ * reapplied against the new course list, instead of going stale.
+ *
+ * Actually filtering (hiding non-matching course cards once the user
+ * activates a filter) still works against the rendered DOM, and still
+ * needs every page loaded to filter across all of them - see
+ * loadAllCoursesImpl() - but this now only happens when a filter is
+ * actually activated, not eagerly on page load.
  *
  * @module     block_enhancedcourseoverview/filter
  * @copyright  2023 Your Name <your.email@example.com>
@@ -38,6 +39,7 @@
  */
 
 import Str from 'core/str';
+import * as Repository from 'block_myoverview/repository';
 
 const SELECTORS = {
     FILTER_BUTTON: '.filter-term-btn',
@@ -59,6 +61,7 @@ const AJAX_SETTLE_TIMEOUT_MS = 8000;
 const INITIAL_RENDER_TIMEOUT_MS = 15000;
 const INITIAL_RENDER_POLL_MS = 150;
 const MAX_NEXT_CLICKS = 500;
+const VIEW_CHANGE_DEBOUNCE_MS = 300;
 
 // Cache of pattern string -> compiled RegExp (or null for a plain-substring
 // pattern), shared across every filter instance on the page since patterns
@@ -156,7 +159,8 @@ const waitForUpdate = (target, timeout) => new Promise(resolve => {
 /**
  * Poll for block_myoverview's first real page of content (a
  * [data-region="paged-content-page"], containing either course cards or a
- * "no courses" message) before this module touches anything.
+ * "no courses" message) before this module touches the rendered course
+ * list.
  *
  * This deliberately does NOT treat the paging bar itself as "ready": Moodle
  * builds and inserts the paging bar synchronously, then immediately clicks
@@ -206,6 +210,7 @@ class CourseFilter {
         this.loadPromise = null;
         this.filtering = false;
         this.originalActivePage = null;
+        this.syncing = false;
 
         this.countIndicator = document.createElement('div');
         this.countIndicator.className = 'course-count-indicator text-muted small';
@@ -260,7 +265,8 @@ class CourseFilter {
      * block_myoverview's items-per-page dropdown (a single request), and
      * fall back to clicking "Next" until it's exhausted when "Show all"
      * isn't offered (Moodle hides it above 100 courses). Safe to call
-     * concurrently - callers share the same in-flight load.
+     * concurrently - callers share the same in-flight load. Only called
+     * once a filter is actually activated (see refresh()), never eagerly.
      *
      * @return {Promise}
      */
@@ -283,6 +289,8 @@ class CourseFilter {
      * @return {Promise}
      */
     async loadAllCoursesImpl() {
+        await waitForInitialRender(this.coursesView);
+
         const pagingBar = this.coursesView.querySelector(SELECTORS.PAGING_BAR);
         if (!pagingBar) {
             // Everything already fits on the one page that's rendered.
@@ -311,32 +319,71 @@ class CourseFilter {
     }
 
     /**
-     * Get the display text used to match each currently loaded course
-     * against filter patterns.
+     * Read the view parameters block_myoverview is currently using to fetch
+     * its own course list, straight off the courses-view element's data
+     * attributes (the same ones its own view.js reads and writes).
      *
-     * @return {String[]}
+     * @return {Object}
      */
-    getCourseNames() {
-        const names = Array.from(
-            this.coursesView.querySelectorAll(SELECTORS.COURSE_NAME),
-            el => el.textContent || ''
-        );
-        if (names.length) {
-            return names;
-        }
-
-        // No dedicated course name element found, fall back to the whole card.
-        return Array.from(this.coursesView.querySelectorAll(SELECTORS.COURSE_ITEM), el => el.textContent || '');
+    getViewParams() {
+        return {
+            classification: this.coursesView.getAttribute('data-grouping') || 'all',
+            sort: this.coursesView.getAttribute('data-sort') || null,
+            customfieldname: this.coursesView.getAttribute('data-customfieldname') || null,
+            customfieldvalue: this.coursesView.getAttribute('data-customfieldvalue') || null,
+        };
     }
 
     /**
-     * Hide filter groups whose patterns match none of the currently loaded
-     * courses, and show groups that do have at least one match. Called
-     * once, after loadAllCourses() has resolved, so the decision reflects
-     * the complete course list rather than whatever page loaded first.
+     * Fetch the names of every course matching the current view (grouping/
+     * sort/custom field), via the same webservice block_myoverview itself
+     * uses - independent of, and without forcing, anything being rendered.
+     *
+     * Note: while a user is actively using block_myoverview's own search
+     * box, this still fetches by the last-selected grouping rather than the
+     * search results, since the search term isn't reflected in courses-view's
+     * data attributes. Group visibility can therefore be briefly inaccurate
+     * during an active search; it corrects itself once the search is
+     * cleared.
+     *
+     * @return {Promise<?String[]>} Course names, or null if the request failed.
      */
-    updateGroupVisibility() {
-        const courseNames = this.getCourseNames();
+    async fetchCourseNames() {
+        const params = this.getViewParams();
+        try {
+            const response = await Repository.getEnrolledCoursesByTimeline({
+                classification: params.classification,
+                limit: 0,
+                offset: 0,
+                sort: params.sort,
+                customfieldname: params.customfieldname,
+                customfieldvalue: params.customfieldvalue,
+                requiredfields: ['fullname'],
+            });
+            return (response.courses || []).map(course => course.fullname || '');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * Hide filter groups whose patterns match none of the user's courses in
+     * the current view, and show groups that do have at least one match.
+     * Based on a background fetch of course names (see fetchCourseNames()),
+     * not on what happens to be rendered, so this never forces the visible
+     * course list to expand and is safe to call any time, including before
+     * block_myoverview has rendered anything at all.
+     *
+     * @return {Promise}
+     */
+    async updateGroupVisibility() {
+        const courseNames = await this.fetchCourseNames();
+        if (courseNames === null) {
+            // Request failed - leave whatever visibility state groups
+            // already have rather than guessing (and potentially hiding
+            // everything) from no data.
+            return;
+        }
 
         this.filterContainer.querySelectorAll(SELECTORS.GROUP).forEach(group => {
             const patterns = Array.from(
@@ -435,9 +482,21 @@ class CourseFilter {
     }
 
     /**
+     * Whether any filter button is currently active.
+     *
+     * @return {Boolean}
+     */
+    hasActiveFilters() {
+        return this.filterContainer.querySelector(`${SELECTORS.FILTER_BUTTON}.active`) !== null;
+    }
+
+    /**
      * Re-read which filter buttons are currently active and re-apply
      * filtering accordingly. Used both after a user interaction and once at
-     * startup, to pick up any filters marked active by default.
+     * startup, to pick up any filters marked active by default. Only loads
+     * every course (loadAllCourses()) when there's actually a filter to
+     * apply - if none are active, this does nothing to the rendered course
+     * list at all.
      *
      * @return {Promise}
      */
@@ -462,6 +521,55 @@ class CourseFilter {
         }
 
         this.applyFilters(patterns);
+    }
+
+    /**
+     * React to block_myoverview rebuilding its course list (e.g. the user
+     * switched its grouping, sort, or custom field selector): re-check which
+     * filter groups have matches, and if a filter is currently active,
+     * re-apply it against the freshly rendered list - otherwise it would
+     * keep showing its "active" styling while silently no longer filtering
+     * anything, since the DOM it was filtering was just replaced.
+     *
+     * @return {Promise}
+     */
+    async handleViewChanged() {
+        if (this.syncing) {
+            return;
+        }
+        this.syncing = true;
+
+        try {
+            // The DOM was rebuilt: previously-loaded/flattened pages and any
+            // saved layout no longer correspond to anything real.
+            this.allLoaded = false;
+            this.filtering = false;
+
+            await this.updateGroupVisibility();
+
+            if (this.hasActiveFilters()) {
+                await this.refresh();
+            }
+        } finally {
+            this.syncing = false;
+        }
+    }
+
+    /**
+     * Start watching the courses-view region for block_myoverview rebuilding
+     * its course list, so filters stay in sync with it instead of silently
+     * going stale. Debounced, since a single grouping change can cause
+     * several mutations in quick succession as block_myoverview re-renders.
+     */
+    watchForViewChanges() {
+        let debounceTimer = null;
+        const observer = new MutationObserver(() => {
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+            debounceTimer = setTimeout(() => this.handleViewChanged(), VIEW_CHANGE_DEBOUNCE_MS);
+        });
+        observer.observe(this.coursesView, {childList: true, subtree: true});
     }
 }
 
@@ -519,17 +627,15 @@ export const init = async(uniqid) => {
         });
     });
 
-    // block_myoverview renders only a placeholder skeleton server-side; wait
-    // for its own AJAX call to render real courses before touching anything.
-    await waitForInitialRender(coursesView);
+    filter.watchForViewChanges();
 
-    // Then load every course up front so which groups have matches can be
-    // determined accurately, instead of guessing from just the first page
-    // and revising that guess (visibly) as more courses stream in.
-    if (coursesView.querySelector(SELECTORS.PAGING_BAR)) {
-        filter.countIndicator.textContent = loading;
-    }
-    await filter.loadAllCourses();
-    filter.updateGroupVisibility();
+    // Group visibility comes from a background webservice call, not from
+    // anything rendered, so it doesn't need to wait for block_myoverview's
+    // own AJAX render at all - it can run immediately.
+    await filter.updateGroupVisibility();
+
+    // Apply any filters marked active by default. If none are, this leaves
+    // the rendered course list exactly as block_myoverview produced it -
+    // no forced full-course load, no extra scroll.
     await filter.refresh();
 };

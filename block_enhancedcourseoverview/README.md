@@ -6,8 +6,9 @@ This plugin extends Moodle's Course Overview block to add simple text-based filt
 
 - Simple text-based filters configured through the plugin settings, matched against course titles/codes as substrings, a digit wildcard, or full regex - not tied to any particular course code convention, since a pattern only needs to match the part of the code it cares about (typically just term+year), not the whole thing
 - Filter buttons organized in groups; click a group's header to toggle every filter in that group at once
-- On load, every course is fetched (by driving Moodle's own dashboard pagination - see "How course loading works" below) before deciding which filter groups have matches, so a group is never wrongly hidden just because its only matching course hadn't loaded yet
+- Which filter groups have matches is decided via a lightweight background request for course names - not by forcing every course to render - so opening the dashboard never changes what's visible or how far you need to scroll, whether or not a filter is active by default
 - Groups with no matching courses are hidden automatically, so the filter bar doesn't clutter the dashboard with irrelevant years
+- Filters stay in sync when you switch Moodle's own course-list controls (the All/Past/Future/etc. grouping, sort order, custom field), instead of silently going stale
 - One or more filters can be configured to be active by default when a user opens their dashboard
 - JavaScript ships as a proper AMD module (`block_enhancedcourseoverview/filter`), scoped per block instance
 - Buttons use plain Bootstrap classes (`.btn-outline-primary`/`.btn-outline-secondary`, `.btn-group-sm`) with no custom colours, border-radius, or shadow - they pick up whatever the active theme actually set, including a customised Boost/Boost Union theme
@@ -102,11 +103,19 @@ Either way, this applies every time the block renders — it is not a per-user p
 2. Use the filter buttons to show only courses matching specific patterns
 3. Click a button to activate the filter, click again to deactivate; click a group's header to toggle the whole group
 4. Multiple filters can be active simultaneously (OR logic)
-5. When the block loads, it fetches every course up front (see below) before deciding which filter groups have at least one match. Groups with no matches are hidden. This means there can be a brief "Loading all courses..." moment right after the dashboard loads on sites with many courses, since every course is being loaded up front rather than only when a filter is clicked.
+5. Opening the dashboard doesn't change what's shown or how far you have to scroll - group visibility is decided in the background (see below), and no course is force-loaded unless you (or a default) actually activate a filter, in which case there's a brief "Loading all courses..." moment while every matching course loads.
 
-## How course loading works
+## How this works
 
-The standard Course Overview block (`block_myoverview`) doesn't have a "load more" button. It has a "Show 12 / 24 / 48 / 96 / All" dropdown and a Next/Previous pager, and it renders courses entirely client-side via AJAX (the server only ever sends a loading placeholder). To see every course - needed both for accurate group-hiding and for filtering to actually reach courses beyond the first page - this plugin's JavaScript:
+### Deciding which filter groups to show
+
+`block_myoverview` (the standard Course Overview block) has its own repository module (`block_myoverview/repository`) for fetching the user's enrolled courses from the server - the same webservice call it uses to render itself. This plugin calls that directly, asking only for course names, to decide which filter groups have at least one match. This is a small, independent background request - it doesn't touch the rendered course list, doesn't force anything to load, and works immediately without waiting for `block_myoverview` to finish rendering.
+
+A `MutationObserver` watches the courses-view region for `block_myoverview` rebuilding its course list (the user switched the All/Past/Future/etc. grouping, sort order, or custom field selector). When that happens, this plugin re-runs the same background check, and - if a filter is currently active - re-applies it against the freshly rendered list. Without this, switching Moodle's own controls would silently leave a filter showing as "active" while doing nothing, since the course list it was filtering had just been replaced. One known gap: while the user is actively using `block_myoverview`'s own search box, group visibility is still checked against the last-selected grouping rather than the search results, since the search term isn't reflected anywhere group visibility can read it. It corrects itself once the search is cleared.
+
+### Actually filtering, once a filter is activated
+
+The standard Course Overview block doesn't have a "load more" button. It has a "Show 12 / 24 / 48 / 96 / All" dropdown and a Next/Previous pager, and it renders courses entirely client-side via AJAX (the server only ever sends a loading placeholder). To filter across every matching course, not just whichever page happens to be showing, this plugin's JavaScript - only once a filter is actually activated, never eagerly on page load:
 
 1. Waits for `block_myoverview`'s own JavaScript to finish its first AJAX render (nothing exists in the DOM to query before that).
 2. Prefers clicking "All" in the items-per-page dropdown, if it's offered - one request instead of many. Moodle only offers "All" for up to 100 total courses; above that it isn't shown at all.
