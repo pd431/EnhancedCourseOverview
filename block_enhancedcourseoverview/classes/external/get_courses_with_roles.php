@@ -116,6 +116,15 @@ class get_courses_with_roles extends external_api {
 
         $courses = [];
         foreach ($result['courses'] as $course) {
+            // Calling get_enrolled_courses_by_timeline_classification()
+            // directly like this bypasses Moodle's normal external-API
+            // dispatch step (external_api::clean_returnvalue()), which is
+            // what usually flattens each course's internal exporter data
+            // into a plain array before a webservice response goes out. Cast
+            // defensively so this works whether an individual course comes
+            // back as a stdClass (the raw, un-flattened shape) or already an
+            // array.
+            $course = (array) $course;
             $courses[] = [
                 'id' => (int) $course['id'],
                 'fullname' => $course['fullname'],
