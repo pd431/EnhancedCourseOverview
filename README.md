@@ -3,6 +3,8 @@
 
 *Started as a proof of concept; hardened since, but still worth a careful review/staging test before rolling out to a live site.*
 
+This branch relies on Moodle's own `core_course_external::get_enrolled_courses_by_timeline_classification()` for all course/role data - no custom SQL or query batching, just augmenting core's own output with role data. A separate exploratory branch, [`claude/fast-path-performance-experiment`](https://github.com/pd431/EnhancedCourseOverview/tree/claude/fast-path-performance-experiment), replaces that call with direct enrolment queries and manual classification for large-enrolment performance - see that branch's README for details. It hasn't been merged here since it trades some of core's built-in correctness handling (visibility/capability checks) for speed, and hasn't been tested against a live large-scale site yet.
+
 This plugin creates a new block that extends the core Course Overview Dashboard.
 
 In Site Admin, you can configure the plugin's settings (not the block's instance settings) with user defineable groups of filters.
