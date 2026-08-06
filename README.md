@@ -1,22 +1,38 @@
 # Enhanced Course Overview
-## A Proof of concept moodle plugin to add custom filters to the course overview dashboard
+## A moodle plugin to add custom filters to the course overview dashboard
 
-*NOT FOR PRODUCTION USE*
+*Started as a proof of concept; hardened since, but still worth a careful review/staging test before rolling out to a live site.*
+
+This branch relies on Moodle's own `core_course_external::get_enrolled_courses_by_timeline_classification()` for all course/role data - no custom SQL or query batching, just augmenting core's own output with role data. A separate exploratory branch, [`claude/fast-path-performance-experiment`](https://github.com/pd431/EnhancedCourseOverview/tree/claude/fast-path-performance-experiment), replaces that call with direct enrolment queries and manual classification for large-enrolment performance - see that branch's README for details. It hasn't been merged here since it trades some of core's built-in correctness handling (visibility/capability checks) for speed, and hasn't been tested against a live large-scale site yet.
 
 This plugin creates a new block that extends the core Course Overview Dashboard.
 
 In Site Admin, you can configure the plugin's settings (not the block's instance settings) with user defineable groups of filters.
 
-This is only a proof of concept, tested on Moodle 4.5.3, with Boost-Union, and coded under my supervision by Claude.
+Originally a proof of concept tested on Moodle 4.5.3 with Boost-Union, coded under supervision by Claude. It has since been cleaned up for production readiness: debug/dev cruft (inline `error_log()` calls, an on-page debug panel, a raw settings dump on the admin page) has been removed, the JavaScript now lives in a proper AMD module instead of an inline `<script>` block, filter matching targets the course name specifically instead of the whole card's text, the "load more" pagination flow waits on actual DOM mutations instead of a fixed `setTimeout`, and a missing `addinstance` capability was added.
+
+On top of that: filter groups now hide themselves when no course matches them, a group's header toggles every filter in it at once, one or more filters can be marked to be active by default, and pattern matching supports a digit wildcard and full regex for course codes that don't fit a plain substring (e.g. a code spanning multiple terms in one field). Deliberately kept manual-only for filter definitions (no auto-generation) so the config stays simple to read and predict. Button styling was pared back to plain `.btn-outline-primary`/`.btn-outline-secondary` and `.btn-group-sm` - no custom colours, border-radius, or shadow overrides - so buttons pick up whatever the active theme actually set, including on themes that customise Bootstrap's variables.
+
+A later pass corrected two real bugs the earlier pass's guesses had introduced, found by pulling Moodle's actual `blocks/myoverview` and `core/paged_content_*` source rather than assuming: (1) `block_myoverview` has no "load more" button — it has a "Show 12/24/48/96/All" dropdown plus Next/Previous, and previously-loaded pages stay in the DOM (hidden, not removed); the course-loading logic now drives that real component instead of clicking a button that doesn't exist. (2) `data-region="course-content"` is an attribute on each *individual* course card, not a wrapping list container as assumed — so `querySelector` for it was silently grabbing the first course card, making the old save/restore-layout and empty-state logic no-ops. Both are fixed; see the block's own README for how course loading now works.
+
+Deciding which filter groups have matches was then reworked entirely: it previously forced every course to eagerly load on every page view (via the pagination flow above) just to compute this, which meant opening the dashboard always showed every course by default, added scroll before other blocks lower on the page, and went stale the moment a user switched Moodle's own All/Past/Future grouping (the underlying course list got replaced by Moodle without our filters knowing). A `MutationObserver` re-runs a background check (and reapplies any active filter) whenever Moodle rebuilds its own course list, so filters no longer go stale on grouping/sort changes. Course loading via the pagination flow above still happens, but only once a filter is actually activated, not eagerly.
+
+Filter definitions can now also mark themselves active by default inline (`Term 2|_*2*_202526|default`), instead of only via the separate settings field.
+
+Role-based filtering was added: an automatic "Roles" filter group appears whenever a user holds more than one distinct role across their courses (e.g. Editor in some, Student in others) - no configuration needed, and it's built (and rebuilt on view changes) from the same background request that drives group visibility, so no extra request per role check. This needed the background request itself to change: rather than calling `block_myoverview/repository` (which only returns display fields, no role data) and adding a *second*, separate webservice call for roles, this plugin now defines its own webservice (`block_enhancedcourseoverview_get_courses_with_roles`) that calls Moodle's own `core_course_external::get_enrolled_courses_by_timeline_classification()` directly - the exact function block_myoverview itself uses - and augments its output with role data, mirroring how Moodle core itself composes external functions (e.g. `core_course\external\get_enrolled_courses_with_action_events_by_timeline_classification` does the same to add calendar events). One request instead of two, and course enrolment/classification logic is never reimplemented, only extended - the plugin still rides on core's own logic rather than forking it. It only ever returns the logged-in user's own data.
+
+Filters within the same group (or the auto-generated Roles group) OR together; a Term-category filter and a Role-category filter AND together, so activating "Term 2" and "Editor" shows only Term 2 courses where the user is also an Editor, not the union of the two.
+
+The filter bar no longer flashes every group visible before narrowing them down: it starts hidden and is only revealed once it's known which groups actually apply. To avoid paying that wait on every page load, the last-known decision is cached client-side in `localStorage`, keyed by user id and block instance together so it can never cross between different users of the same browser, and reused (with an instant reveal, no network wait) on the next visit, refreshed quietly in the background afterwards.
 
 ### Known Issues
-- Filters only apply to current pagination. Elements on subsequent pages aren't loaded
-- Changing pagination doesn't reload the filters
-- Filter Style is inconsistent with the rest of moodle
-- Filters can clutter the dashboard's interface.
-- Filters can't be set as default values
-- No AMD modules, javascript is part of the main class
-- Way more. This is only an AI written concept plugin.
+- Filters can clutter the dashboard's interface, though contextual group-hiding now helps with this.
+- The `block_enhancedcourseoverview_get_courses_with_roles` webservice is an AJAX-callable endpoint and hasn't been security-reviewed by anyone other than the author of this plugin. It only ever returns the calling user's own enrolled courses and own role assignments (no userid parameter is exposed), and the course list itself is produced entirely by Moodle's own `core_course_external::get_enrolled_courses_by_timeline_classification()`, not reimplemented - but review it yourself before deploying to a site with sensitive data.
+- The client-side filter cache (see above) persists in `localStorage` until it expires (24 hours) or is overwritten, including on shared/public computers - it holds only course names and role names/shortnames for whichever courses were visible in the cached view, keyed by user id so it's never read back for a different logged-in user, but it isn't proactively wiped on logout. Consider this if deploying to kiosks or other genuinely shared/walk-up machines.
+- While a user is actively using Moodle's own course search box, group visibility is checked against the last-selected grouping rather than the live search results, since the search term isn't reflected anywhere this plugin can read it in the background. Corrects itself once the search is cleared.
+- `amd/build/filter.min.js` was hand-written to mirror `amd/src/filter.js`, since this repo doesn't include Moodle's own Grunt build tooling. Once dropped into a full Moodle checkout, regenerate it with `grunt amd` before shipping.
+- Still relies on regex-splicing filter buttons into the parent block's rendered HTML and on the specific `data-region`/`data-control`/`data-limit` markup of `block_myoverview` and Moodle core's `core/paged_content_*` components (verified by reading their source on `MOODLE_405_STABLE`, not by guessing), so a future Moodle core update could break it. Test against your target Moodle version before upgrading.
+- Verified against a live Moodle 5.0.2 site (role filtering, defaults, and caching all confirmed working), in addition to reading Moodle's actual source for the real markup/behaviour and unit-testing the PHP parsing logic standalone. Still worth a staging test on your own Moodle version before a full rollout.
 
 See [The Plugin's readme](https://github.com/pd431/EnhancedCourseOverview/blob/main/block_enhancedcourseoverview/README.md) for configuration and use
 

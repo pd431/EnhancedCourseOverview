@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Capabilities for the Enhanced Course Overview block.
+ * External functions for the Enhanced Course Overview block.
  *
  * @package    block_enhancedcourseoverview
  * @copyright  2023 Your Name <your.email@example.com>
@@ -24,23 +24,14 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$capabilities = array(
-    'block/enhancedcourseoverview:addinstance' => array(
-        'captype' => 'write',
-        'contextlevel' => CONTEXT_BLOCK,
-        'archetypes' => array(
-            'editingteacher' => CAP_ALLOW,
-            'manager' => CAP_ALLOW
-        ),
-        'clonepermissionsfrom' => 'moodle/site:manageblocks'
-    ),
-
-    'block/enhancedcourseoverview:myaddinstance' => array(
-        'captype' => 'write',
-        'contextlevel' => CONTEXT_SYSTEM,
-        'archetypes' => array(
-            'user' => CAP_ALLOW
-        ),
-        'clonepermissionsfrom' => 'moodle/my:manageblocks'
-    )
-);
+$functions = [
+    'block_enhancedcourseoverview_get_courses_with_roles' => [
+        'classname'   => 'block_enhancedcourseoverview\external\get_courses_with_roles',
+        'methodname'  => 'execute',
+        'description' => 'Get the current user\'s courses matching a timeline classification, ' .
+            'with the roles the user holds in each course.',
+        'type'        => 'read',
+        'ajax'        => true,
+        'loginrequired' => true,
+    ],
+];
